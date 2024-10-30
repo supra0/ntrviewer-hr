@@ -13,18 +13,20 @@
 #ifndef NK_SDL_GL3_H_
 #define NK_SDL_GL3_H_
 
+#include "nuklear/nuklear.h"
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 
-NK_API struct nk_context*   nk_sdl_init(SDL_Window *win);
-NK_API void                 nk_sdl_font_stash_begin(struct nk_font_atlas **atlas);
-NK_API void                 nk_sdl_font_stash_end(void);
-NK_API int                  nk_sdl_handle_event(SDL_Event *evt);
-NK_API void                 nk_sdl_render(enum nk_anti_aliasing , int max_vertex_buffer, int max_element_buffer, int vflip);
-NK_API void                 nk_sdl_shutdown(void);
-NK_API void                 nk_sdl_device_destroy(void);
-NK_API void                 nk_sdl_device_create(void);
-NK_API void                 nk_sdl_handle_grab(void);
+NK_API struct nk_context*   nk_sdl_gl3_init(SDL_Window *win);
+NK_API void                 nk_sdl_gl3_font_stash_begin(struct nk_font_atlas **atlas);
+NK_API void                 nk_sdl_gl3_font_stash_end(void);
+NK_API int                  nk_sdl_gl3_handle_event(SDL_Event *evt);
+NK_API void                 nk_sdl_gl3_render(enum nk_anti_aliasing , int max_vertex_buffer, int max_element_buffer, int vflip);
+NK_API void                 nk_sdl_gl3_shutdown(void);
+NK_API void                 nk_sdl_gl3_device_destroy(void);
+NK_API void                 nk_sdl_gl3_device_create(void);
+NK_API void                 nk_sdl_gl3_handle_grab(void);
 
 #endif
 
@@ -40,6 +42,8 @@ NK_API void                 nk_sdl_handle_grab(void);
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+
+#include "ui_common_sdl.h"
 
 struct nk_sdl_device {
     struct nk_buffer cmds;
@@ -76,7 +80,7 @@ static struct nk_sdl {
   #define NK_SHADER_VERSION "#version 300 es\n"
 #endif
 NK_API void
-nk_sdl_device_create(void)
+nk_sdl_gl3_device_create(void)
 {
     GLint status;
     static const GLchar *vertex_shader =
@@ -171,7 +175,7 @@ nk_sdl_device_upload_atlas(const void *image, int width, int height)
 }
 
 NK_API void
-nk_sdl_device_destroy(void)
+nk_sdl_gl3_device_destroy(void)
 {
     struct nk_sdl_device *dev = &sdl.ogl;
     glDetachShader(dev->prog, dev->vert_shdr);
@@ -185,11 +189,8 @@ nk_sdl_device_destroy(void)
     nk_buffer_free(&dev->cmds);
 }
 
-extern int sdl_display_width, sdl_display_height;
-extern struct nk_vec2 sdl_scale;
-
 NK_API void
-nk_sdl_render(enum nk_anti_aliasing AA, int max_vertex_buffer, int max_element_buffer, int vflip)
+nk_sdl_gl3_render(enum nk_anti_aliasing AA, int max_vertex_buffer, int max_element_buffer, int vflip)
 {
     struct nk_sdl_device *dev = &sdl.ogl;
     struct nk_vec2 scale;
@@ -208,10 +209,10 @@ nk_sdl_render(enum nk_anti_aliasing AA, int max_vertex_buffer, int max_element_b
     sdl.ctx.delta_time_seconds = (float)(now - sdl.time_of_last_frame) / 1000;
     sdl.time_of_last_frame = now;
 
-    scale = sdl_scale;
+    scale = (struct nk_vec2){ ui_nk_scale, ui_nk_scale };
 
-    int display_width = sdl_display_width, display_height = sdl_display_height;
-    GLfloat width = (GLfloat)display_width / scale.x, height = (GLfloat)display_height / scale.y;
+    GLfloat width = (GLfloat)ui_nk_width, height = (GLfloat)ui_nk_height;
+    int display_width = width * ui_nk_scale, display_height = height * ui_nk_scale;
     ortho[0][0] /= width;
     ortho[1][1] /= height;
 
@@ -329,20 +330,20 @@ nk_sdl_clipboard_copy(nk_handle usr, const char *text, int len)
 }
 
 NK_API struct nk_context*
-nk_sdl_init(SDL_Window *win)
+nk_sdl_gl3_init(SDL_Window *win)
 {
     sdl.win = win;
     nk_init_default(&sdl.ctx, 0);
     sdl.ctx.clip.copy = nk_sdl_clipboard_copy;
     sdl.ctx.clip.paste = nk_sdl_clipboard_paste;
     sdl.ctx.clip.userdata = nk_handle_ptr(0);
-    nk_sdl_device_create();
+    nk_sdl_gl3_device_create();
     sdl.time_of_last_frame = SDL_GetTicks64();
     return &sdl.ctx;
 }
 
 NK_API void
-nk_sdl_font_stash_begin(struct nk_font_atlas **atlas)
+nk_sdl_gl3_font_stash_begin(struct nk_font_atlas **atlas)
 {
     nk_font_atlas_init_default(&sdl.atlas);
     nk_font_atlas_begin(&sdl.atlas);
@@ -350,7 +351,7 @@ nk_sdl_font_stash_begin(struct nk_font_atlas **atlas)
 }
 
 NK_API void
-nk_sdl_font_stash_end(void)
+nk_sdl_gl3_font_stash_end(void)
 {
     const void *image; int w, h;
     image = nk_font_atlas_bake(&sdl.atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
@@ -362,7 +363,7 @@ nk_sdl_font_stash_end(void)
 }
 
 NK_API void
-nk_sdl_handle_grab(void)
+nk_sdl_gl3_handle_grab(void)
 {
     struct nk_context *ctx = &sdl.ctx;
     if (ctx->input.mouse.grab) {
@@ -378,7 +379,7 @@ nk_sdl_handle_grab(void)
 }
 
 NK_API int
-nk_sdl_handle_event(SDL_Event *evt)
+nk_sdl_gl3_handle_event(SDL_Event *evt)
 {
     struct nk_context *ctx = &sdl.ctx;
 
@@ -467,11 +468,11 @@ nk_sdl_handle_event(SDL_Event *evt)
 }
 
 NK_API
-void nk_sdl_shutdown(void)
+void nk_sdl_gl3_shutdown(void)
 {
     nk_font_atlas_clear(&sdl.atlas);
     nk_free(&sdl.ctx);
-    nk_sdl_device_destroy();
+    nk_sdl_gl3_device_destroy();
     memset(&sdl, 0, sizeof(sdl));
 }
 

@@ -288,11 +288,13 @@ static unsigned GF256_Polynomial;
 
 /// We require memory to be aligned since the SIMD instructions benefit from
 /// or require aligned accesses to the table data.
+#ifndef GF256_TARGET_MOBILE
 static struct
 {
     GF256_ALIGNED GF256_M128 TABLE_LO_Y[256];
     GF256_ALIGNED GF256_M128 TABLE_HI_Y[256];
 } GF256_MM128;
+#endif
 #ifdef GF256_TRY_AVX2
 static struct
 {

@@ -425,7 +425,7 @@ void Decoder::MultiplyLowerTriangle()
 FecalResult Decoder::BackSubstitution()
 {
     const unsigned columns = static_cast<unsigned>(RecoveryMatrix.Columns.size());
-    const unsigned srcBytes = Window.SymbolBytes;
+    // const unsigned srcBytes = Window.SymbolBytes;
 
     RecoveredData.resize(columns);
 

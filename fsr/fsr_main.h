@@ -9,21 +9,7 @@
 extern "C" {
 #endif
 
-enum {
-  SCREEN_TOP,
-  SCREEN_BOT,
-  SCREEN_COUNT,
-};
-
-enum FrameBufferIndexInit
-{
-  FBI_DECODE,
-  FBI_READY_DISPLAY,
-  FBI_READY_DISPLAY_2,
-  FBI_DISPLAY,
-  FBI_DISPLAY_2,
-  FBI_COUNT,
-};
+#include "../const.h"
 
 #define FrameBufferCount (FBI_COUNT)
 

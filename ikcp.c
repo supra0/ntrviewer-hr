@@ -303,6 +303,7 @@ static int ikcp_add_original(ikcpcb *kcp, const char *data, IUINT32 size, IUINT1
 	IUINT16 hdr = *(IUINT16 *)data;
 	IUINT16 pid = hdr & ((1 << PID_NBITS) - 1);
 	IUINT16 cid = (hdr >> PID_NBITS) & ((1 << CID_NBITS) - 1);
+	(void)gid;
 
 #if 0
 	const int data_counter_loc = sizeof(IUINT16);
@@ -401,7 +402,7 @@ static int ikcp_remove_fec_for(ikcpcb *kcp, IUINT16 fid)
 // Currently works on little endian only
 int ikcp_input(ikcpcb *kcp, const char *data, long size)
 {
-	if (size < sizeof(IUINT16)) {
+	if (size < (long)sizeof(IUINT16)) {
 		return -10;
 	}
 
@@ -447,7 +448,7 @@ int ikcp_input(ikcpcb *kcp, const char *data, long size)
 		return 11;
 	}
 
-	if (size != kcp->mtu - sizeof(IUINT16)) {
+	if (size != (long)kcp->mtu - (long)sizeof(IUINT16)) {
 		return -1;
 	}
 
@@ -498,13 +499,13 @@ int ikcp_input(ikcpcb *kcp, const char *data, long size)
 	}
 
 	int has_count = 0;
-	for (int i = 0; i < count; ++i) {
+	for (int i = 0; i < (int)count; ++i) {
 		if (fec->data_ptrs[i]) {
 			++has_count;
 		}
 	}
 	if (counts.original_count == 1 && has_count >= 1) {
-		for (int i = 0; i < count; ++i) {
+		for (int i = 0; i < (int)count; ++i) {
 			char *data = fec->data_ptrs[i];
 			if (data) {
 				int ret;
@@ -581,9 +582,9 @@ int ikcp_input(ikcpcb *kcp, const char *data, long size)
 			goto fail_decoder;
 		}
 
-		for (int i = 0; i < recovered.Count; ++i) {
+		for (int i = 0; i < (int)recovered.Count; ++i) {
 			if (recovered.Symbols[i].Index < counts.original_count) {
-				if (recovered.Symbols[i].Bytes != size) {
+				if ((int)recovered.Symbols[i].Bytes != size) {
 					ret = -6;
 					goto fail_decoder;
 				}

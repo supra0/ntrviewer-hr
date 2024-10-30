@@ -11,17 +11,17 @@
 #ifndef NK_SDL_RENDERER_H_
 #define NK_SDL_RENDERER_H_
 
-#ifndef NK_SDL_RENDERER_SDL_H
-#define NK_SDL_RENDERER_SDL_H <SDL.h>
-#endif
-#include NK_SDL_RENDERER_SDL_H
-NK_API struct nk_context*   nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer);
-NK_API void                 nk_sdl_font_stash_begin(struct nk_font_atlas **atlas);
-NK_API void                 nk_sdl_font_stash_end(void);
-NK_API int                  nk_sdl_handle_event(SDL_Event *evt);
-NK_API void                 nk_sdl_render(enum nk_anti_aliasing);
-NK_API void                 nk_sdl_shutdown(void);
-NK_API void                 nk_sdl_handle_grab(void);
+#include "nuklear/nuklear.h"
+
+#include <SDL2/SDL.h>
+
+NK_API struct nk_context*   nk_sdl_renderer_init(SDL_Window *win, SDL_Renderer *renderer);
+NK_API void                 nk_sdl_renderer_font_stash_begin(struct nk_font_atlas **atlas);
+NK_API void                 nk_sdl_renderer_font_stash_end(void);
+NK_API int                  nk_sdl_renderer_handle_event(SDL_Event *evt);
+NK_API void                 nk_sdl_renderer_render(enum nk_anti_aliasing);
+NK_API void                 nk_sdl_renderer_shutdown(void);
+NK_API void                 nk_sdl_renderer_handle_grab(void);
 
 #if SDL_COMPILEDVERSION < SDL_VERSIONNUM(2, 0, 22)
 /* Metal API does not support cliprects with negative coordinates or large
@@ -83,7 +83,7 @@ nk_sdl_device_upload_atlas(const void *image, int width, int height)
 }
 
 NK_API void
-nk_sdl_render(enum nk_anti_aliasing AA)
+nk_sdl_renderer_render(enum nk_anti_aliasing AA)
 {
     /* setup global state */
     struct nk_sdl_device *dev = &sdl.ogl;
@@ -222,7 +222,7 @@ nk_sdl_clipboard_copy(nk_handle usr, const char *text, int len)
 }
 
 NK_API struct nk_context*
-nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer)
+nk_sdl_renderer_init(SDL_Window *win, SDL_Renderer *renderer)
 {
 #ifndef NK_SDL_CLAMP_CLIP_RECT
     SDL_RendererInfo info;
@@ -255,7 +255,7 @@ nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer)
 }
 
 NK_API void
-nk_sdl_font_stash_begin(struct nk_font_atlas **atlas)
+nk_sdl_renderer_font_stash_begin(struct nk_font_atlas **atlas)
 {
     nk_font_atlas_init_default(&sdl.atlas);
     nk_font_atlas_begin(&sdl.atlas);
@@ -263,7 +263,7 @@ nk_sdl_font_stash_begin(struct nk_font_atlas **atlas)
 }
 
 NK_API void
-nk_sdl_font_stash_end(void)
+nk_sdl_renderer_font_stash_end(void)
 {
     const void *image; int w, h;
     image = nk_font_atlas_bake(&sdl.atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
@@ -274,7 +274,7 @@ nk_sdl_font_stash_end(void)
 }
 
 NK_API void
-nk_sdl_handle_grab(void)
+nk_sdl_renderer_handle_grab(void)
 {
     struct nk_context *ctx = &sdl.ctx;
     if (ctx->input.mouse.grab) {
@@ -290,7 +290,7 @@ nk_sdl_handle_grab(void)
 }
 
 NK_API int
-nk_sdl_handle_event(SDL_Event *evt)
+nk_sdl_renderer_handle_event(SDL_Event *evt)
 {
     struct nk_context *ctx = &sdl.ctx;
 
@@ -379,7 +379,7 @@ nk_sdl_handle_event(SDL_Event *evt)
 }
 
 NK_API
-void nk_sdl_shutdown(void)
+void nk_sdl_renderer_shutdown(void)
 {
     struct nk_sdl_device *dev = &sdl.ogl;
     nk_font_atlas_clear(&sdl.atlas);

@@ -1,4 +1,3 @@
-// #include <GLES3/gl32.h>
 #include <glad/glad.h>
 
 #include "image_utils.h"
@@ -14,7 +13,6 @@
 
 #include <cstring>
 
-// #define USE_OGL_ES
 #ifdef USE_OGL_ES
 #define GLSL_VERSION "#version 310 es"
 #else

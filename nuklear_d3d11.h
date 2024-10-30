@@ -19,6 +19,8 @@
 typedef struct ID3D11Device ID3D11Device;
 typedef struct ID3D11DeviceContext ID3D11DeviceContext;
 
+#include "nuklear/nuklear.h"
+
 NK_API struct nk_context *nk_d3d11_init(ID3D11Device *device, int width, int height, unsigned int max_vertex_buffer, unsigned int max_index_buffer);
 NK_API void nk_d3d11_font_stash_begin(struct nk_font_atlas **atlas);
 NK_API void nk_d3d11_font_stash_end(void);
@@ -46,6 +48,7 @@ NK_API void nk_d3d11_shutdown(void);
 #include <string.h>
 #include <float.h>
 #include <assert.h>
+#include <math.h>
 
 #include "nuklear_d3d11_vertex_shader.h"
 #include "nuklear_d3d11_pixel_shader.h"
@@ -157,10 +160,10 @@ nk_d3d11_render(ID3D11DeviceContext *context, enum nk_anti_aliasing AA, float sc
         ID3D11ShaderResourceView *texture_view = (ID3D11ShaderResourceView *)cmd->texture.ptr;
         if (!cmd->elem_count) continue;
 
-        scissor.left = (LONG)nk_roundf(cmd->clip_rect.x * scale);
-        scissor.right = (LONG)nk_roundf((cmd->clip_rect.x + cmd->clip_rect.w) * scale);
-        scissor.top = (LONG)nk_roundf(cmd->clip_rect.y * scale);
-        scissor.bottom = (LONG)nk_roundf((cmd->clip_rect.y + cmd->clip_rect.h) * scale);
+        scissor.left = (LONG)roundf(cmd->clip_rect.x * scale);
+        scissor.right = (LONG)roundf((cmd->clip_rect.x + cmd->clip_rect.w) * scale);
+        scissor.top = (LONG)roundf(cmd->clip_rect.y * scale);
+        scissor.bottom = (LONG)roundf((cmd->clip_rect.y + cmd->clip_rect.h) * scale);
 
         ID3D11DeviceContext_PSSetShaderResources(context, 0, 1, &texture_view);
         ID3D11DeviceContext_RSSetScissorRects(context, 1, &scissor);
@@ -599,6 +602,7 @@ nk_d3d11_font_stash_end(void)
     /* upload font to texture and create texture view */
     {ID3D11Texture2D *font_texture;
     HRESULT hr;
+    NK_UNUSED(hr);
 
     D3D11_TEXTURE2D_DESC desc;
     memset(&desc, 0, sizeof(desc));
