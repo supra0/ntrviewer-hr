@@ -133,6 +133,24 @@ static int sdl_win_resize_evt_watcher(void *, SDL_Event *event) {
 }
 #endif
 
+static void main_ntr(void) {
+#ifdef _WIN32
+    sock_startup();
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_DISPLAY_REQUIRED);
+#endif
+
+    ntr_config_set_default();
+    ntr_detect_3ds_ip();
+    ntr_get_adapter_list();
+    ntr_try_auto_select_adaptor();
+    // TODO
+
+#ifdef _WIN32
+    SetThreadExecutionState(ES_CONTINUOUS);
+    sock_cleanup();
+#endif
+}
+
 static void main_windows(void) {
 #ifdef _WIN32
     for (int i = 0; i < SCREEN_COUNT; ++i) {
@@ -168,15 +186,7 @@ static void main_windows(void) {
         ui_window_size_update(i);
     }
 
-    sock_startup();
-
-    ntr_config_set_default();
-    ntr_detect_3ds_ip();
-    ntr_get_adapter_list();
-    ntr_try_auto_select_adaptor();
-    // TODO
-
-    sock_cleanup();
+    main_ntr();
 
 #ifdef _WIN32
     DeleteObject(bg_brush);

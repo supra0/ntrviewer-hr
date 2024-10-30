@@ -6,26 +6,14 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
-#endif
-
-int sock_startup(void)
-{
-#ifdef _WIN32
+int sock_startup(void) {
     WSADATA wsa_data;
     return WSAStartup(MAKEWORD(2, 2), &wsa_data);
-#else
-    return 0;
-#endif
 }
-
-int sock_cleanup(void)
-{
-#ifdef _WIN32
+int sock_cleanup(void) {
     return WSACleanup();
-#else
-    return 0;
-#endif
 }
+#endif
 
 struct ntr_rp_config_t ntr_rp_config;
 void ntr_config_set_default(void) {

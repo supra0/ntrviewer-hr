@@ -140,15 +140,15 @@ extern pthread_condattr_t rp_cond_attr;
 #define rp_cond_close(c) pthread_cond_destroy(&(c))
 
 static struct timespec clock_monotonic_abs_ns_from_now(long ns) {
-  struct timespec to;
-  if (clock_gettime(CLOCK_MONOTONIC, &to) != 0) {
-    return (struct timespec){ 0, 0 };
-  }
-  to.tv_nsec += ns;
-  to.tv_sec += to.tv_nsec / 1000000000;
-  to.tv_nsec %= 1000000000;
+	struct timespec to;
+	if (clock_gettime(CLOCK_MONOTONIC, &to) != 0) {
+		return (struct timespec){ 0, 0 };
+	}
+	to.tv_nsec += ns;
+	to.tv_sec += to.tv_nsec / 1000000000;
+	to.tv_nsec %= 1000000000;
 
-  return to;
+	return to;
 }
 
 #endif
