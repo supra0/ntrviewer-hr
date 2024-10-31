@@ -9,8 +9,8 @@
 #include "main.h"
 #include <stdatomic.h>
 
-int sock_startup(void);
-int sock_cleanup(void);
+int socket_startup(void);
+int socket_shutdown(void);
 
 UNUSED static bool socket_set_nonblock(SOCKET s, bool nb)
 {

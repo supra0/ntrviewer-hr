@@ -2,6 +2,7 @@
 #define MAIN_H
 
 #include "const.h"
+#include "rp_syn.h"
 #include <stdatomic.h>
 
 #ifdef _WIN32
@@ -14,6 +15,9 @@
 #endif
 
 extern atomic_bool program_running;
+
+extern bool renderer_single_thread;
+extern bool renderer_evt_sync;
 
 void itimeofday(int64_t *sec, int64_t *usec);
 

@@ -36,6 +36,10 @@ static void main_destroy() {
 
 static enum ui_renderer_t renderer_list[UI_RENDERER_COUNT];
 static int renderer_count;
+static event_t renderer_begin_evt;
+static event_t renderer_end_evt;
+bool renderer_single_thread;
+bool renderer_evt_sync;
 
 static void parse_args(int argc, char **argv) {
     (void)argc;
@@ -59,6 +63,7 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
     bool need_handle_input = 0;
     LPARAM handled_lparam = lparam;
+    bool resize_top_and_ui = i == SCREEN_TOP;
 
     switch (msg) {
         case WM_DESTROY:
@@ -66,25 +71,22 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             return 0;
 
         case WM_SIZE: {
-            bool resize_top_and_ui = i == SCREEN_TOP;
-
             ui_win_drawable_width[i] = NK_MAX(LOWORD(lparam), 1);
             ui_win_drawable_height[i] = NK_MAX(HIWORD(lparam), 1);
-
             ui_win_width[i] = roundf(ui_win_drawable_width[i] / ui_win_scale[i]);
             ui_win_height[i] = roundf(ui_win_drawable_height[i] / ui_win_scale[i]);
-
             if (resize_top_and_ui) {
                 ui_nk_width = ui_win_width[i];
                 ui_nk_height = ui_win_height[i];
-                ui_nk_scale = ui_win_scale[i];
             }
-
             break;
         }
 
         case WM_DPICHANGED:
             ui_win_scale[i] = (float)HIWORD(wparam) / USER_DEFAULT_SCREEN_DPI;
+            if (resize_top_and_ui) {
+                ui_nk_scale = ui_win_scale[i];
+            }
             break;
 
         case WM_LBUTTONDOWN:
@@ -146,6 +148,81 @@ static int sdl_win_resize_evt_watcher(void *, SDL_Event *event) {
   return 0;
 }
 #endif
+
+#define MIN_UPDATE_INTERVAL_US (33333)
+static bool decode_cond_wait(event_t *event)
+{
+    int res = event_wait(event, MIN_UPDATE_INTERVAL_US * 1000);
+    if (res == ETIMEDOUT) {
+    } else if (res) {
+        err_log("decode_cond_wait failed: %d\n", res);
+        return false;
+    }
+    return true;
+}
+
+static void thread_loop(int i) {
+    // TODO csc
+    // int ctx_top_bot = i;
+    int screen_top_bot = i;
+    // bool win_shared = 0;
+
+    int screen_count= SCREEN_COUNT;
+    view_mode_t view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
+    if (view_mode != VIEW_MODE_SEPARATE) {
+        screen_count = 1;
+        // TODO csc
+    }
+
+    if (i >= screen_count) {
+        if (!renderer_single_thread)
+            event_wait(&update_bottom_screen_evt, NWM_THREAD_WAIT_NS);
+        return;
+    }
+
+    if (renderer_single_thread) {
+        if (i == SCREEN_TOP && !decode_cond_wait(&decode_updated_event))
+            return;
+    } else {
+        int buf_top_bot = view_mode == VIEW_MODE_BOT ? SCREEN_BOT : screen_top_bot;
+        if (!decode_cond_wait(&rp_buffer_ctx[buf_top_bot].decode_updated_event))
+            return;
+    }
+
+    float bg[4];
+    nk_color_fv(bg, nk_window_bgcolor);
+
+    if (!renderer_single_thread && renderer_evt_sync)
+        if (!cond_mutex_flag_lock(&renderer_begin_evt))
+            return;
+
+    if (is_renderer_sdl_renderer()) {
+        ui_renderer_sdl_main(screen_top_bot, view_mode, bg);
+    }
+
+    // TODO
+
+    if (is_renderer_sdl_renderer()) {
+        ui_renderer_sdl_present(screen_top_bot);
+    }
+
+    if (!renderer_single_thread && renderer_evt_sync)
+        cond_mutex_flag_signal(&renderer_end_evt);
+}
+
+static thread_ret_t window_thread_func(void *arg) {
+    RO_INIT();
+
+    int i = (int)(uintptr_t)arg;
+    // TODO ogl
+    while (program_running)
+        thread_loop(i);
+    // TODO csc
+
+    RO_UNINIT();
+
+    return (thread_ret_t)(uintptr_t)NULL;
+}
 
 static void main_loop(void) {
     // TODO csc
@@ -230,73 +307,20 @@ static void main_loop(void) {
 skip_evt:
         }
     }
-}
 
-#define MIN_UPDATE_INTERVAL_US (33333)
-static bool decode_cond_wait(event_t *event)
-{
-    int res = event_wait(event, MIN_UPDATE_INTERVAL_US * 1000);
-    if (res == ETIMEDOUT) {
-    } else if (res) {
-        err_log("decode_cond_wait failed: %d\n", res);
-        return false;
+    if (renderer_single_thread) {
+        for (int i = 0; i < SCREEN_COUNT; ++i)
+            thread_loop(i);
+    } else if (renderer_evt_sync) {
+        cond_mutex_flag_signal(&renderer_begin_evt);
+        if (!cond_mutex_flag_lock(&renderer_end_evt))
+            return;
     }
-    return true;
-}
-
-static void thread_loop(int i) {
-    // TODO csc
-    // int ctx_top_bot = i;
-    int screen_top_bot = i;
-    // bool win_shared = 0;
-
-    int screen_count= SCREEN_COUNT;
-    view_mode_t view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
-    if (view_mode != VIEW_MODE_SEPARATE) {
-        screen_count = 1;
-        // TODO csc
-    }
-
-    if (i >= screen_count) {
-        event_wait(&update_bottom_screen_evt, NWM_THREAD_WAIT_NS);
-        return;
-    }
-
-    int buf_top_bot = view_mode == VIEW_MODE_BOT ? SCREEN_BOT : screen_top_bot;
-    if (!decode_cond_wait(&rp_buffer_ctx[buf_top_bot].decode_updated_event))
-        return;
-
-    float bg[4];
-    nk_color_fv(bg, nk_window_bgcolor);
-
-    if (is_renderer_sdl_renderer()) {
-        ui_renderer_sdl_main(screen_top_bot, view_mode, bg);
-    }
-
-    // TODO
-
-    if (is_renderer_sdl_renderer()) {
-        ui_renderer_sdl_present(screen_top_bot);
-    }
-}
-
-static thread_ret_t window_thread_func(void *arg) {
-    RO_INIT();
-
-    int i = (int)(uintptr_t)arg;
-    // TODO ogl
-    while (program_running)
-        thread_loop(i);
-    // TODO csc
-
-    RO_UNINIT();
-
-    return (thread_ret_t)(uintptr_t)NULL;
 }
 
 static void main_ntr(void) {
 #ifdef _WIN32
-    sock_startup();
+    socket_startup();
     SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED | ES_DISPLAY_REQUIRED);
 #endif
 
@@ -342,28 +366,33 @@ static void main_ntr(void) {
         goto join_nwm_tcp;
     }
 
-    thread_t window_top_thread;
-    if ((ret = thread_create(window_top_thread, window_thread_func, (void *)SCREEN_TOP)))
-    {
-        err_log("window_top_thread create failed\n");
-        program_running = false;
-        goto join_win_top;
-    }
-    thread_t window_bot_thread;
-    if ((ret = thread_create(window_bot_thread, window_thread_func, (void *)SCREEN_BOT)))
-    {
-        err_log("window_bot_thread create failed\n");
-        program_running = false;
-        goto join_win_bot;
+    thread_t window_top_thread = 0;
+    thread_t window_bot_thread = 0;
+
+    if (!renderer_single_thread) {
+        if ((ret = thread_create(window_top_thread, window_thread_func, (void *)SCREEN_TOP)))
+        {
+            err_log("window_top_thread create failed\n");
+            program_running = false;
+            goto join_win_top;
+        }
+        if ((ret = thread_create(window_bot_thread, window_thread_func, (void *)SCREEN_BOT)))
+        {
+            err_log("window_bot_thread create failed\n");
+            program_running = false;
+            goto join_win_bot;
+        }
     }
 
     while (program_running)
         main_loop();
 
-    thread_join(window_bot_thread);
+    if (!renderer_single_thread) {
+        thread_join(window_bot_thread);
 join_win_bot:
-    thread_join(window_top_thread);
+        thread_join(window_top_thread);
 join_win_top:
+    }
 
 #ifndef _WIN32
     thread_cancel(nwm_tcp_thread);
@@ -381,11 +410,17 @@ join_udp_recv:
 
 #ifdef _WIN32
     SetThreadExecutionState(ES_CONTINUOUS);
-    sock_cleanup();
+    socket_shutdown();
 #endif
 }
 
 static void main_windows(void) {
+    for (int i = 0; i < SCREEN_COUNT; ++i) {
+        ui_win_scale[i] = 1.0f;
+    }
+    event_init(&renderer_begin_evt);
+    event_init(&renderer_end_evt);
+
 #ifdef _WIN32
     for (int i = 0; i < SCREEN_COUNT; ++i) {
         SDL_SysWMinfo wmInfo;
@@ -433,6 +468,8 @@ static void main_windows(void) {
         ui_hwnd[i] = NULL;
     }
 #endif
+    event_close(&renderer_end_evt);
+    event_close(&renderer_begin_evt);
 }
 
 int main(int argc, char **argv) {

@@ -41,5 +41,6 @@ struct rp_buffer_ctx_t {
     event_t decode_updated_event;
 };
 extern struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
+extern event_t decode_updated_event;
 
 #endif

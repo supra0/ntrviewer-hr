@@ -62,17 +62,89 @@ static void sdl_texture_destroy(void) {
 }
 
 static int sdl_renderer_init(void) {
-    Uint32 renderer_flags = is_renderer_sdl_hw() ?
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC :
-        SDL_RENDERER_SOFTWARE | SDL_RENDERER_PRESENTVSYNC;
+    bool renderer_hw = is_renderer_sdl_hw();
+    char *renderer_name = SDL_getenv(SDL_HINT_RENDER_DRIVER);
 
+    int renderer_index = -1;
     for (int i = 0; i < SCREEN_COUNT; ++i) {
-        sdl_renderer[i] = SDL_CreateRenderer(sdl_win[i], -1, renderer_flags);
-        if (!sdl_renderer[i])
-        {
-            err_log("SDL_CreateRenderer: %s\n", SDL_GetError());
+        int num_renderer = SDL_GetNumRenderDrivers();
+        if (num_renderer < 0) {
+            err_log("SDL_GetNumRenderDrivers: %s\n", SDL_GetError());
             return -1;
         }
+
+        if (i == SCREEN_TOP) {
+            if (renderer_name) {
+                for (int j = 0; j < num_renderer; ++j) {
+                    SDL_RendererInfo info;
+                    if (SDL_GetRenderDriverInfo(j, &info)) {
+                        err_log("SDL_GetRenderDriverInfo: %s\n", SDL_GetError());
+                        return -1;
+                    }
+
+#define try_create_renderer() ({ \
+    sdl_renderer[i] = SDL_CreateRenderer(sdl_win[i], j, 0); \
+    if (!sdl_renderer[i]) { \
+        err_log("SDL_CreateRenderer: %s\n", SDL_GetError()); \
+        continue; \
+    } \
+    renderer_index = j; \
+ \
+    if (strcmp(info.name, "direct3d") == 0) { \
+        renderer_single_thread = 1; \
+    } else { \
+        renderer_evt_sync = 1; \
+    } \
+    break; \
+})
+
+                    if (
+                        strcmp(info.name, renderer_name) == 0 &&
+                        (
+                            (renderer_hw && (info.flags & SDL_RENDERER_ACCELERATED)) ||
+                            (!renderer_hw && (info.flags & SDL_RENDERER_SOFTWARE))
+                        )
+                    ) {
+
+                        try_create_renderer();
+                        break;
+                    }
+                }
+            }
+
+            if (renderer_index < 0) {
+                for (int j = 0; j < num_renderer; ++j) {
+                    SDL_RendererInfo info;
+                    if (SDL_GetRenderDriverInfo(j, &info)) {
+                        err_log("SDL_GetRenderDriverInfo: %s\n", SDL_GetError());
+                        return -1;
+                    }
+
+                    if (renderer_hw && !(info.flags & SDL_RENDERER_ACCELERATED)) {
+                        continue;
+                    }
+
+                    if (!renderer_hw && !(info.flags & SDL_RENDERER_SOFTWARE)) {
+                        continue;
+                    }
+
+                    try_create_renderer();
+                    break;
+                }
+            }
+        } else {
+            sdl_renderer[i] = SDL_CreateRenderer(sdl_win[i], renderer_index, 0);
+            if (!sdl_renderer[i]) {
+                err_log("SDL_CreateRenderer: %s\n", SDL_GetError());
+                return -1;
+            }
+        }
+
+        if (!sdl_renderer[i]) {
+            return -1;
+        }
+
+        SDL_RenderSetVSync(sdl_renderer[i], 1);
     }
 
     if (sdl_texture_init()) {
@@ -133,6 +205,7 @@ void ui_renderer_sdl_destroy(void) {
 #include "ntr_rp.h"
 void ui_renderer_sdl_main(int screen_top_bot, view_mode_t view_mode, float bg[4]) {
     int i = screen_top_bot;
+    SDL_RenderSetScale(sdl_renderer[i], ui_win_scale[i], ui_win_scale[i]);
     SDL_SetRenderDrawColor(sdl_renderer[i], bg[0] * 255, bg[1] * 255, bg[2] * 255, bg[3] * 255);
     SDL_RenderClear(sdl_renderer[i]);
 

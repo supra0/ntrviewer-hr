@@ -5,11 +5,11 @@
 #define NTR_IP_OCTET_SIZE (4)
 
 #ifdef _WIN32
-int sock_startup(void) {
+int socket_startup(void) {
     WSADATA wsa_data;
     return WSAStartup(MAKEWORD(2, 2), &wsa_data);
 }
-int sock_cleanup(void) {
+int socket_shutdown(void) {
     return WSACleanup();
 }
 #endif

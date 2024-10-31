@@ -30,6 +30,13 @@ int ui_common_sdl_init(void) {
     SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "1");
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+#ifdef _WIN32
+    SDL_SetHint(SDL_HINT_RENDER_DIRECT3D_THREADSAFE, "1");
+    SDL_SetHint(SDL_HINT_WINDOWS_USE_D3D9EX, "1");
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11");
+    SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "direct3d11");
+#endif
 
     if (is_renderer_sdl_renderer()) {
         if (SDL_Init(SDL_INIT_VIDEO)) {
@@ -95,7 +102,7 @@ void ui_view_mode_update(view_mode_t view_mode) {
             break;
     }
 
-    if (view_mode == VIEW_MODE_SEPARATE) {
+    if (!renderer_single_thread && view_mode == VIEW_MODE_SEPARATE) {
         event_rel(&update_bottom_screen_evt);
     }
 }
@@ -110,10 +117,12 @@ void ui_window_size_update(int window_top_bot) {
     } else if (is_renderer_sdl_ogl()) {
         SDL_GL_GetDrawableSize(ui_sdl_win[i], &ui_win_drawable_width[i], &ui_win_drawable_height[i]);
     } else if (is_renderer_d3d11()) {
+#ifdef _WIN32
         RECT rect = {};
         GetClientRect(ui_hwnd[i], &rect);
         ui_win_drawable_width[i] = rect.right;
         ui_win_drawable_height[i] = rect.bottom;
+#endif
     }
 
     float scale_x = (float)(ui_win_drawable_width[i]) / (float)(ui_win_width[i]);
@@ -121,10 +130,6 @@ void ui_window_size_update(int window_top_bot) {
     scale_x = roundf(scale_x * ui_font_scale_step_factor) / ui_font_scale_step_factor;
     scale_y = roundf(scale_y * ui_font_scale_step_factor) / ui_font_scale_step_factor;
     ui_win_scale[i] = (scale_x + scale_y) * 0.5;
-
-    if (is_renderer_sdl_renderer()) {
-        SDL_RenderSetScale(sdl_renderer[i], ui_win_scale[i], ui_win_scale[i]);
-    }
 
     if (i == SCREEN_TOP) {
         ui_nk_width = ui_win_width[i];

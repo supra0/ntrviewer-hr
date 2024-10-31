@@ -95,6 +95,7 @@ static void kcp_init(ikcpcb *kcp) {
 }
 
 struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
+event_t decode_updated_event;
 
 void rp_buffer_init(void) {
   for (int i = 0; i < SCREEN_COUNT; ++i) {
@@ -107,9 +108,13 @@ void rp_buffer_init(void) {
         ctx->index_decode = FBI_DECODE;
         event_init(&ctx->decode_updated_event);
     }
+
+    event_init(&decode_updated_event);
 }
 
 void rp_buffer_destroy(void) {
+    event_close(&decode_updated_event);
+
     for (int i = 0; i < SCREEN_COUNT; ++i) {
         struct rp_buffer_ctx_t *ctx = &rp_buffer_ctx[i];
         event_close(&ctx->decode_updated_event);
@@ -462,10 +467,14 @@ static void handle_decode_frame_screen(struct rp_buffer_ctx_t *ctx, int top_bot,
     }
     rp_lock_rel(ctx->status_lock);
 
-    if (sync_ctx)
-        cond_mutex_flag_signal(&sync_ctx->decode_updated_event);
-    else
-        cond_mutex_flag_signal(&ctx->decode_updated_event);
+    if (renderer_single_thread) {
+        cond_mutex_flag_signal(&decode_updated_event);
+    } else {
+        if (sync_ctx)
+            cond_mutex_flag_signal(&sync_ctx->decode_updated_event);
+        else
+            cond_mutex_flag_signal(&ctx->decode_updated_event);
+    }
 }
 
 static thread_ret_t jpeg_decode_thread_func(void *e)
@@ -923,7 +932,7 @@ static void socket_action(int ret)
     }
 }
 
-static void receive_from_socket(SOCKET s)
+static void receive_from_socket()
 {
     while (program_running && !kcp_restart)
     {
@@ -1066,7 +1075,7 @@ static void receive_from_socket_loop(void) {
             break;
         }
 
-        receive_from_socket(s);
+        receive_from_socket();
         // Sleep(SOCKET_RESET_INTERVAL_MS);
 
 #ifdef _WIN32
