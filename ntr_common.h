@@ -1,14 +1,63 @@
 #ifndef NTR_COMMON_H
 #define NTR_COMMON_H
 
+#define SOCKET_POLL_INTERVAL_MS 250
+#define SOCKET_RESET_INTERVAL_MS 2000
+
 #include "nuklear/nuklear.h"
 
+#include "main.h"
 #include <stdatomic.h>
 
 int sock_startup(void);
 int sock_cleanup(void);
 
+UNUSED static bool socket_set_nonblock(SOCKET s, bool nb)
+{
+#ifdef _WIN32
+    u_long opt = nb;
+    if (ioctlsocket(s, FIONBIO, &opt)) {
+        return false;
+    }
+#else
+    int flags = fcntl(s, F_GETFL, 0);
+    if (flags == -1) {
+        return false;
+    }
+    flags = nb ? flags | O_NONBLOCK : flags & ~O_NONBLOCK;
+    if (fcntl(s, F_SETFL, flags) != 0) {
+        return false;
+    }
+#endif
+    return true;
+}
+
+UNUSED static bool socket_poll(SOCKET s)
+{
+    while (program_running) {
+        WSAPOLLFD pollfd = {
+            .fd = s,
+            .events = POLLIN,
+            .revents = 0,
+        };
+        int res = WSAPoll(&pollfd, 1, SOCKET_POLL_INTERVAL_MS);
+        if (res < 0) {
+            return false;
+        }
+        else if (res > 0) {
+            if (pollfd.revents & POLLIN) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 extern atomic_uint_fast8_t ntr_ip_octet[4];
+
+extern atomic_int ntr_rp_port;
+extern atomic_int ntr_rp_port_bound;
+extern atomic_bool ntr_rp_port_changed;
 
 struct ntr_rp_config_t {
     nk_bool top_screen_priority;

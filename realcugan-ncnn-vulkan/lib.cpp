@@ -26,7 +26,7 @@
 #define REALCUGAN_WORK_COUNT (2)
 
 static RealCUGAN* realcugan[SCREEN_COUNT * REALCUGAN_WORK_COUNT];
-static int realcugan_indices[SCREEN_COUNT * FrameBufferCount];
+static int realcugan_indices[SCREEN_COUNT * FBI_COUNT];
 static int realcugan_work_indices[SCREEN_COUNT];
 static std::vector<std::unique_ptr<std::mutex>> realcugan_locks;
 static bool realcugan_support_ext_mem;
@@ -44,7 +44,7 @@ static int realcugan_size()
 
 static int realcugan_index(int top_bot, int index, int next)
 {
-    index = top_bot * FrameBufferCount + index;
+    index = top_bot * FBI_COUNT + index;
     if (next) {
         ++realcugan_work_indices[top_bot];
         realcugan_work_indices[top_bot] %= REALCUGAN_WORK_COUNT;
@@ -72,7 +72,7 @@ static int realcugan_index(int top_bot, int index, int next)
 static void realcugan_close() {
     for (int k = 0; k < SCREEN_COUNT; ++k) {
         for (int j = 0; j < SCREEN_COUNT; ++j) {
-            for (int i = 0; i < FrameBufferCount; ++i) {
+            for (int i = 0; i < FBI_COUNT; ++i) {
                 realcugan_next(k, j, i);
             }
         }

@@ -5,7 +5,6 @@
 #define NTR_IP_OCTET_SIZE (4)
 
 #ifdef _WIN32
-#include <winsock2.h>
 int sock_startup(void) {
     WSADATA wsa_data;
     return WSAStartup(MAKEWORD(2, 2), &wsa_data);
@@ -14,6 +13,10 @@ int sock_cleanup(void) {
     return WSACleanup();
 }
 #endif
+
+atomic_int ntr_rp_port = 8001;
+atomic_int ntr_rp_port_bound;
+atomic_bool ntr_rp_port_changed;
 
 struct ntr_rp_config_t ntr_rp_config;
 void ntr_config_set_default(void) {
@@ -413,5 +416,5 @@ fail:
     return;
 }
 #else
-// TODO
+#error TODO
 #endif

@@ -31,6 +31,7 @@ typedef enum {
     VIEW_MODE_BOT,
 } view_mode_t;
 extern view_mode_t ui_view_mode;
+extern bool ui_fullscreen;
 
 #ifdef _WIN32
 #include <windows.h>
@@ -59,6 +60,14 @@ UNUSED static bool is_renderer_sdl_ogl(void) {
     return ui_renderer >= UI_RENDERER_OGL_CSC && ui_renderer <= UI_RENDERER_GLES_ANGLE;
 }
 
+UNUSED static bool is_renderer_ogl(void) {
+    return ui_renderer >= UI_RENDERER_OGL_CSC && ui_renderer <= UI_RENDERER_OGL;
+}
+
+UNUSED static bool is_renderer_gles(void) {
+    return ui_renderer >= UI_RENDERER_GLES_CSC && ui_renderer <= UI_RENDERER_GLES_ANGLE;
+}
+
 UNUSED static bool is_renderer_gles_angle(void) {
     return ui_renderer == UI_RENDERER_GLES_ANGLE;
 }
@@ -70,7 +79,12 @@ UNUSED static bool is_renderer_sdl_hw(void) {
 int ui_common_sdl_init(void);
 void ui_common_sdl_destroy(void);
 
+extern event_t update_bottom_screen_evt;
 void ui_view_mode_update(view_mode_t view_mode);
 void ui_window_size_update(int window_top_bot);
+
+#include "ntr_rp.h"
+struct rp_buffer_ctx_t;
+int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared);
 
 #endif

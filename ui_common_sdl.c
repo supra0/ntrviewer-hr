@@ -8,6 +8,7 @@ enum ui_renderer_t ui_renderer;
 SDL_Window *ui_sdl_win[SCREEN_COUNT];
 struct nk_context *ui_nk_ctx;
 view_mode_t ui_view_mode;
+bool ui_fullscreen;
 
 #ifdef _WIN32
 HWND ui_hwnd[SCREEN_COUNT];
@@ -22,6 +23,8 @@ float ui_nk_scale;
 int ui_win_width[SCREEN_COUNT], ui_win_height[SCREEN_COUNT];
 int ui_win_drawable_width[SCREEN_COUNT], ui_win_drawable_height[SCREEN_COUNT];
 float ui_win_scale[SCREEN_COUNT];
+
+event_t update_bottom_screen_evt;
 
 int ui_common_sdl_init(void) {
     SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
@@ -93,7 +96,7 @@ void ui_view_mode_update(view_mode_t view_mode) {
     }
 
     if (view_mode == VIEW_MODE_SEPARATE) {
-        // TODO
+        event_rel(&update_bottom_screen_evt);
     }
 }
 
@@ -117,10 +120,64 @@ void ui_window_size_update(int window_top_bot) {
     float scale_y = (float)(ui_win_drawable_height[i]) / (float)(ui_win_height[i]);
     scale_x = roundf(scale_x * ui_font_scale_step_factor) / ui_font_scale_step_factor;
     scale_y = roundf(scale_y * ui_font_scale_step_factor) / ui_font_scale_step_factor;
+    ui_win_scale[i] = (scale_x + scale_y) * 0.5;
+
+    if (is_renderer_sdl_renderer()) {
+        SDL_RenderSetScale(sdl_renderer[i], ui_win_scale[i], ui_win_scale[i]);
+    }
 
     if (i == SCREEN_TOP) {
         ui_nk_width = ui_win_width[i];
         ui_nk_height = ui_win_height[i];
         ui_nk_scale = ui_win_scale[i];
+    }
+}
+
+static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, int index, view_mode_t view_mode, bool win_shared) {
+    if (is_renderer_sdl_renderer()) {
+        ui_renderer_sdl_draw(data, width, height, screen_top_bot, ctx_top_bot, view_mode);
+    }
+    (void)ctx;
+    (void)index;
+    (void)win_shared;
+    // TODO
+}
+
+int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared) {
+    sr_next(ctx_top_bot, screen_top_bot, ctx->index_display_2);
+
+    rp_lock_wait(ctx->status_lock);
+    enum frame_buffer_status_t status = ctx->status;
+    if (ctx->status == FBS_UPDATED_2) {
+        int index = ctx->index_ready_display_2;
+        ctx->index_ready_display_2 = ctx->index_display_2;
+        ctx->index_display_2 = ctx->index_display;
+        ctx->index_display = index;
+        ctx->status = FBS_UPDATED;
+    } else if (ctx->status == FBS_UPDATED) {
+        int index = ctx->index_ready_display;
+        ctx->index_ready_display = ctx->index_display_2;
+        ctx->index_display_2 = ctx->index_display;
+        ctx->index_display = index;
+        ctx->status = FBS_NOT_UPDATED;
+    }
+    int index_display = ctx->index_display;
+    rp_lock_rel(ctx->status_lock);
+
+    if (status == FBS_NOT_AVAIL)
+        return 0;
+
+    uint8_t *data = ctx->screen_decoded[index_display];
+    ctx->prev_data = data;
+    if (status >= FBS_UPDATED)
+    {
+        __atomic_add_fetch(&frame_rate_displayed_tracker[screen_top_bot], 1, __ATOMIC_RELAXED);
+        draw_screen_dispatch(ctx, data, width, height, screen_top_bot, ctx_top_bot, index_display, view_mode, win_shared);
+        return 1;
+    }
+    else
+    {
+        draw_screen_dispatch(ctx, NULL, width, height, screen_top_bot, ctx_top_bot, index_display, view_mode, win_shared);
+        return -1;
     }
 }

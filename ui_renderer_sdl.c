@@ -129,3 +129,86 @@ void ui_renderer_sdl_destroy(void) {
 
     sdl_win_destroy();
 }
+
+#include "ntr_rp.h"
+void ui_renderer_sdl_main(int screen_top_bot, view_mode_t view_mode, float bg[4]) {
+    int i = screen_top_bot;
+    SDL_SetRenderDrawColor(sdl_renderer[i], bg[0] * 255, bg[1] * 255, bg[2] * 255, bg[3] * 255);
+    SDL_RenderClear(sdl_renderer[i]);
+
+    if (view_mode == VIEW_MODE_TOP_BOT) {
+        draw_screen(&rp_buffer_ctx[SCREEN_TOP], SCREEN_HEIGHT0, SCREEN_WIDTH, SCREEN_TOP, i, view_mode, 0);
+        draw_screen(&rp_buffer_ctx[SCREEN_BOT], SCREEN_HEIGHT1, SCREEN_WIDTH, SCREEN_BOT, i, view_mode, 0);
+    } else if (view_mode == VIEW_MODE_BOT) {
+        draw_screen(&rp_buffer_ctx[SCREEN_BOT], SCREEN_HEIGHT1, SCREEN_WIDTH, SCREEN_BOT, i, view_mode, 0);
+    } else {
+        draw_screen(&rp_buffer_ctx[i], i == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1, SCREEN_WIDTH, i, i, view_mode, 0);
+    }
+}
+
+void ui_renderer_sdl_draw(uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode) {
+    int i = ctx_top_bot;
+    SDL_Texture *tex = sdl_texture[i][screen_top_bot];
+
+    if (data) {
+        void *pixels;
+        int pitch;
+        if (SDL_LockTexture(tex, NULL, &pixels, &pitch) < 0) {
+            err_log("SDL_LockTexture: %s\n", SDL_GetError());
+            return;
+        }
+
+        uint8_t *dst = pixels;
+        const int bpp = 4;
+        for (int x = 0; x < width; ++x) {
+            memcpy(dst + x * pitch, data + x * height * bpp, height * bpp);
+        }
+
+        SDL_UnlockTexture(tex);
+    }
+
+    int ctx_left;
+    int ctx_top;
+    int ctx_width;
+    int ctx_height;
+
+    if (view_mode == VIEW_MODE_TOP_BOT) {
+        ctx_height = (double)ui_win_height[i] / 2;
+        if ((double)ui_win_width[i] / width * height > ctx_height) {
+            ctx_width = (double)ctx_height / height * width;
+            ctx_left = (double)(ui_win_width[i] - ctx_width) / 2;
+            ctx_top = 0;
+        } else {
+            ctx_height = (double)ui_win_width[i] / width * height;
+            ctx_left = 0;
+            ctx_width = ui_win_width[i];
+            ctx_top = (double)ui_win_height[i] / 2 - ctx_height;
+        }
+
+        if (screen_top_bot != SCREEN_TOP) {
+            ctx_top = (double)ui_win_height[i] / 2;
+        }
+    } else {
+        ctx_height = (double)ui_win_height[i];
+        if ((double)ui_win_width[i] / width * height > ctx_height) {
+            ctx_width = (double)ctx_height / height * width;
+            ctx_left = (double)(ui_win_width[i] - ctx_width) / 2;
+            ctx_top = 0;
+        } else {
+            ctx_height = (double)ui_win_width[i] / width * height;
+            ctx_left = 0;
+            ctx_width = ui_win_width[i];
+            ctx_top = ((double)ui_win_height[i] - ctx_height) / 2;
+        }
+    }
+
+    SDL_Rect rect = { ctx_left, ctx_top + ctx_height, ctx_height, ctx_width };
+    SDL_Point center = { 0, 0 };
+    SDL_RenderCopyEx(sdl_renderer[i], tex, NULL, &rect, -90, &center, SDL_FLIP_NONE);
+}
+
+void ui_renderer_sdl_present(int screen_top_bot) {
+    int i = screen_top_bot;
+    // TODO
+    SDL_RenderPresent(sdl_renderer[i]);
+}

@@ -11,8 +11,6 @@ extern "C" {
 
 #include "../const.h"
 
-#define FrameBufferCount (FBI_COUNT)
-
 #ifdef USE_D3D11
 #else
 GLuint fsr_main(int tb, int top_bot, GLuint inputTexture, uint32_t in_w, uint32_t in_h, uint32_t out_w, uint32_t out_h, float rcasAtt);
