@@ -38,6 +38,12 @@ static enum ui_renderer_t renderer_list[UI_RENDERER_COUNT];
 static int renderer_count;
 static event_t renderer_begin_evt;
 static event_t renderer_end_evt;
+static rp_lock_t nk_input_lock;
+static view_mode_t ui_view_mode_prev;
+static bool ui_fullscreen_prev;
+static float ui_font_scale;
+bool nk_gui_next;
+bool nk_input_current;
 bool renderer_single_thread;
 bool renderer_evt_sync;
 
@@ -58,6 +64,7 @@ static void parse_args(int argc, char **argv) {
     ui_renderer = renderer_list[0];
 }
 
+#ifdef _WIN32
 static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     int i = GetWindowLongPtrA(hwnd, GWLP_USERDATA);
 
@@ -120,15 +127,25 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
     }
 
     if (need_handle_input) {
-        // TODO input lock/input begin
-
         if (is_renderer_d3d11()) {
+            if (!renderer_single_thread)
+                rp_lock_wait(nk_input_lock);
+
+            if (!nk_input_current) {
+                nk_input_begin(ui_nk_ctx);
+                nk_input_current = 1;
+            }
+
             nk_d3d11_handle_event(hwnd, msg, wparam, handled_lparam);
+
+            if (!renderer_single_thread)
+                rp_lock_rel(nk_input_lock);
         }
     }
 
     return CallWindowProcA((WNDPROC)ui_sdl_wnd_proc[i], hwnd, msg, wparam, lparam);
 }
+#endif
 
 static struct nk_color nk_window_bgcolor = { 28, 48, 62, 255 };
 
@@ -163,7 +180,7 @@ static bool decode_cond_wait(event_t *event)
 
 static void thread_loop(int i) {
     // TODO csc
-    // int ctx_top_bot = i;
+    int ctx_top_bot = i;
     int screen_top_bot = i;
     // bool win_shared = 0;
 
@@ -197,13 +214,50 @@ static void thread_loop(int i) {
             return;
 
     if (is_renderer_sdl_renderer()) {
-        ui_renderer_sdl_main(screen_top_bot, view_mode, bg);
+        ui_renderer_sdl_main(ctx_top_bot, view_mode, bg);
     }
 
-    // TODO
+    if (i == SCREEN_TOP) {
+        if (nk_gui_next) {
+            if (nk_input_current) {
+                nk_input_end(ui_nk_ctx);
+                nk_input_current = 0;
+            } else {
+                nk_input_begin(ui_nk_ctx);
+                nk_input_end(ui_nk_ctx);
+            }
+
+            ui_main_nk();
+            nk_gui_next = 0;
+        }
+
+        if (
+            fabsf(ui_font_scale - ui_win_scale[ctx_top_bot]) >= ui_font_scale_epsilon)
+        {
+            ui_font_scale = ui_win_scale[ctx_top_bot];
+
+            /* Load Fonts: if none of these are loaded a default font will be used  */
+            /* Load Cursor: if you uncomment cursor loading please hide the cursor */
+            struct nk_font_atlas *atlas;
+            struct nk_font_config config = nk_font_config(0);
+            struct nk_font *font;
+
+            /* set up the font atlas and add desired font; note that font sizes are
+             * multiplied by font_scale to produce better results at higher DPIs */
+            nk_font_stash_begin(&atlas);
+            font = nk_font_atlas_add_default(atlas, 13 * ui_font_scale, &config);
+            nk_font_stash_end();
+
+            /* this hack makes the font appear to be scaled down to the desired
+             * size and is only necessary when font_scale > 1 */
+            font->handle.height = font->handle.height / ui_font_scale;
+            /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
+            nk_style_set_font(ui_nk_ctx, &font->handle);
+        }
+    }
 
     if (is_renderer_sdl_renderer()) {
-        ui_renderer_sdl_present(screen_top_bot);
+        ui_renderer_sdl_present(ctx_top_bot);
     }
 
     if (!renderer_single_thread && renderer_evt_sync)
@@ -294,8 +348,16 @@ static void main_loop(void) {
                     break;
             }
 
-            // TODO input lock/input begin
             if (!is_renderer_d3d11()) {
+                if (!renderer_single_thread) {
+                    rp_lock_wait(nk_input_lock);
+                }
+
+                if (!nk_input_current) {
+                    nk_input_begin(ui_nk_ctx);
+                    nk_input_current = 1;
+                }
+
                 if (is_renderer_ogl()) {
                     nk_sdl_gl3_handle_event(&evt);
                 } else if (is_renderer_gles()) {
@@ -303,10 +365,36 @@ static void main_loop(void) {
                 } else if (is_renderer_sdl_renderer()) {
                     nk_sdl_renderer_handle_event(&evt);
                 }
+
+                if (!renderer_single_thread) {
+                    rp_lock_rel(nk_input_lock);
+                }
             }
 skip_evt:
         }
     }
+
+    view_mode_t view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
+    if (ui_view_mode_prev != view_mode) {
+        ui_view_mode_update(view_mode);
+        ui_view_mode_prev = view_mode;
+    }
+
+    if (ui_fullscreen_prev != ui_fullscreen) {
+        if (ui_fullscreen) {
+            SDL_SetWindowFullscreen(ui_sdl_win[SCREEN_TOP], SDL_WINDOW_FULLSCREEN_DESKTOP);
+            if (SDL_GetWindowDisplayIndex(ui_sdl_win[SCREEN_TOP]) != SDL_GetWindowDisplayIndex(ui_sdl_win[SCREEN_BOT])) {
+                SDL_SetWindowFullscreen(ui_sdl_win[SCREEN_BOT], SDL_WINDOW_FULLSCREEN_DESKTOP);
+            } else {
+                SDL_RaiseWindow(ui_sdl_win[SCREEN_TOP]);
+            }
+        } else {
+            ui_view_mode_update(view_mode);
+        }
+        ui_fullscreen_prev = ui_fullscreen;
+    }
+
+    ui_windows_titles_update();
 
     if (renderer_single_thread) {
         for (int i = 0; i < SCREEN_COUNT; ++i)
@@ -329,7 +417,7 @@ static void main_ntr(void) {
     ntr_config_set_default();
     ntr_detect_3ds_ip();
     ntr_get_adapter_list();
-    ntr_try_auto_select_adaptor();
+    ntr_try_auto_select_adapter();
 
     program_running = true;
     int ret;
@@ -420,6 +508,9 @@ static void main_windows(void) {
     }
     event_init(&renderer_begin_evt);
     event_init(&renderer_end_evt);
+    rp_lock_init(nk_input_lock);
+    nk_gui_next = 0;
+    nk_input_current = 0;
 
 #ifdef _WIN32
     for (int i = 0; i < SCREEN_COUNT; ++i) {
@@ -457,6 +548,8 @@ static void main_windows(void) {
         ui_window_size_update(i);
     }
 
+    nk_backend_font_init();
+
     main_ntr();
 
     event_close(&update_bottom_screen_evt);
@@ -468,6 +561,8 @@ static void main_windows(void) {
         ui_hwnd[i] = NULL;
     }
 #endif
+
+    rp_lock_close(nk_input_lock);
     event_close(&renderer_end_evt);
     event_close(&renderer_begin_evt);
 }

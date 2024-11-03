@@ -82,6 +82,7 @@ void ui_common_sdl_destroy(void);
 extern event_t update_bottom_screen_evt;
 void ui_view_mode_update(view_mode_t view_mode);
 void ui_window_size_update(int window_top_bot);
+void ui_windows_titles_update(void);
 
 #include "ntr_rp.h"
 struct rp_buffer_ctx_t;

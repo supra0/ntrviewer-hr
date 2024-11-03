@@ -73,16 +73,19 @@ static int sdl_renderer_init(void) {
             return -1;
         }
 
+        SDL_RendererInfo info = {};
         if (i == SCREEN_TOP) {
             if (renderer_name) {
                 for (int j = 0; j < num_renderer; ++j) {
-                    SDL_RendererInfo info;
                     if (SDL_GetRenderDriverInfo(j, &info)) {
                         err_log("SDL_GetRenderDriverInfo: %s\n", SDL_GetError());
                         return -1;
                     }
 
-#define try_create_renderer() ({ \
+// D3D12 would crash when using multiple windows
+#define TRY_CREATE_RENDERER() ({ \
+    if (strcmp(info.name, "direct3d12") == 0) \
+        continue; \
     sdl_renderer[i] = SDL_CreateRenderer(sdl_win[i], j, 0); \
     if (!sdl_renderer[i]) { \
         err_log("SDL_CreateRenderer: %s\n", SDL_GetError()); \
@@ -90,10 +93,10 @@ static int sdl_renderer_init(void) {
     } \
     renderer_index = j; \
  \
-    if (strcmp(info.name, "direct3d") == 0) { \
-        renderer_single_thread = 1; \
-    } else { \
+    if (strcmp(info.name, "direct3d11") == 0) { \
         renderer_evt_sync = 1; \
+    } else { \
+        renderer_single_thread = 1; \
     } \
     break; \
 })
@@ -106,7 +109,7 @@ static int sdl_renderer_init(void) {
                         )
                     ) {
 
-                        try_create_renderer();
+                        TRY_CREATE_RENDERER();
                         break;
                     }
                 }
@@ -114,7 +117,6 @@ static int sdl_renderer_init(void) {
 
             if (renderer_index < 0) {
                 for (int j = 0; j < num_renderer; ++j) {
-                    SDL_RendererInfo info;
                     if (SDL_GetRenderDriverInfo(j, &info)) {
                         err_log("SDL_GetRenderDriverInfo: %s\n", SDL_GetError());
                         return -1;
@@ -128,7 +130,7 @@ static int sdl_renderer_init(void) {
                         continue;
                     }
 
-                    try_create_renderer();
+                    TRY_CREATE_RENDERER();
                     break;
                 }
             }
@@ -145,6 +147,10 @@ static int sdl_renderer_init(void) {
         }
 
         SDL_RenderSetVSync(sdl_renderer[i], 1);
+
+        if (i == SCREEN_TOP) {
+            err_log("%s %s\n", info.name ? info.name : "", renderer_single_thread ? "single thread" : renderer_evt_sync ? "evt sync" : "");
+        }
     }
 
     if (sdl_texture_init()) {
@@ -157,6 +163,8 @@ static int sdl_renderer_init(void) {
 
     return 0;
 }
+
+#undef TRY_CREATE_RENDERER
 
 static void sdl_renderer_destroy(void) {
     if (nk_ctx) {
@@ -203,8 +211,8 @@ void ui_renderer_sdl_destroy(void) {
 }
 
 #include "ntr_rp.h"
-void ui_renderer_sdl_main(int screen_top_bot, view_mode_t view_mode, float bg[4]) {
-    int i = screen_top_bot;
+void ui_renderer_sdl_main(int ctx_top_bot, view_mode_t view_mode, float bg[4]) {
+    int i = ctx_top_bot;
     SDL_RenderSetScale(sdl_renderer[i], ui_win_scale[i], ui_win_scale[i]);
     SDL_SetRenderDrawColor(sdl_renderer[i], bg[0] * 255, bg[1] * 255, bg[2] * 255, bg[3] * 255);
     SDL_RenderClear(sdl_renderer[i]);
@@ -280,8 +288,12 @@ void ui_renderer_sdl_draw(uint8_t *data, int width, int height, int screen_top_b
     SDL_RenderCopyEx(sdl_renderer[i], tex, NULL, &rect, -90, &center, SDL_FLIP_NONE);
 }
 
-void ui_renderer_sdl_present(int screen_top_bot) {
-    int i = screen_top_bot;
-    // TODO
+void ui_renderer_sdl_present(int ctx_top_bot) {
+    int i = ctx_top_bot;
+    if (i == SCREEN_TOP) {
+        if (!nk_input_current && !nk_gui_next)
+        nk_sdl_renderer_render(NK_ANTI_ALIASING_ON);
+        nk_gui_next = 1;
+    }
     SDL_RenderPresent(sdl_renderer[i]);
 }

@@ -55,7 +55,7 @@ UNUSED static bool socket_poll(SOCKET s)
 
 extern atomic_uint_fast8_t ntr_ip_octet[4];
 
-extern atomic_int ntr_rp_port;
+extern int ntr_rp_port;
 extern atomic_int ntr_rp_port_bound;
 extern atomic_bool ntr_rp_port_changed;
 
@@ -77,24 +77,24 @@ extern int ntr_auto_ip_count;
 extern int ntr_selected_ip;
 extern int ntr_selected_adapter;
 
-extern char **ntr_adaptor_list;
-extern uint8_t **ntr_adaptor_octet_list;
-extern int ntr_adaptor_count;
+extern char **ntr_adapter_list;
+extern uint8_t **ntr_adapter_octet_list;
+extern int ntr_adapter_count;
 
 enum {
-    NTR_ADAPTOR_PRE_ANY,
-    NTR_ADAPTOR_PRE_COUNT,
+    NTR_adapter_PRE_ANY,
+    NTR_adapter_PRE_COUNT,
 };
 
 enum {
-    NTR_ADAPTOR_POST_AUTO,
-    NTR_ADAPTOR_POST_REFRESH,
-    NTR_ADAPTOR_POST_COUNT,
+    NTR_adapter_POST_AUTO,
+    NTR_adapter_POST_REFRESH,
+    NTR_adapter_POST_COUNT,
 };
 
-#define NTR_ADAPTOR_EXTRA_COUNT (NTR_ADAPTOR_PRE_COUNT + NTR_ADAPTOR_POST_COUNT)
+#define NTR_adapter_EXTRA_COUNT (NTR_adapter_PRE_COUNT + NTR_adapter_POST_COUNT)
 
-void ntr_try_auto_select_adaptor(void);
+void ntr_try_auto_select_adapter(void);
 void ntr_detect_3ds_ip(void);
 void ntr_get_adapter_list(void);
 

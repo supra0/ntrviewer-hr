@@ -18,9 +18,9 @@ static void socket_error_pause(void) {
 static uint8_t buf[BUF_SIZE];
 static ikcpcb *kcp;
 static int kcp_cid;
-static bool kcp_restart;
-static bool kcp_active;
 static int kcp_cid_reset = (IUINT16)-1 & ((1 << CID_NBITS) - 1);
+atomic_bool kcp_active;
+atomic_bool kcp_restart;
 
 static int kcp_udp_output(const char *buf, int len, ikcpcb *, void *)
 {
@@ -201,8 +201,8 @@ static int queue_decode_kcp(int w, int queue_w) {
     return 0;
 }
 
-static int frame_fully_received_tracker;
-static int frame_lost_tracker;
+atomic_int frame_fully_received_tracker;
+atomic_int frame_lost_tracker;
 static uint8_t last_decoded_frame_id[SCREEN_COUNT];
 
 #include <turbojpeg.h>
@@ -1111,7 +1111,7 @@ thread_ret_t udp_recv_thread_func(void *) {
         struct sockaddr_in si_other;
         si_other.sin_family = AF_INET;
         si_other.sin_port = htons(ntr_rp_port_bound);
-        si_other.sin_addr.s_addr = ntr_adaptor_octet_list ? *(uint32_t *)ntr_adaptor_octet_list[ntr_selected_adapter] : 0;
+        si_other.sin_addr.s_addr = ntr_adapter_octet_list ? *(uint32_t *)ntr_adapter_octet_list[ntr_selected_adapter] : 0;
 
         if (bind(s, (struct sockaddr *)&si_other, sizeof(si_other)) == SOCKET_ERROR)
         {
@@ -1120,7 +1120,7 @@ thread_ret_t udp_recv_thread_func(void *) {
             goto socket_final;
         }
         uint8_t octets_null[] = {0, 0, 0, 0};
-        uint8_t *octets = ntr_adaptor_octet_list ? ntr_adaptor_octet_list[ntr_selected_adapter] : octets_null;
+        uint8_t *octets = ntr_adapter_octet_list ? ntr_adapter_octet_list[ntr_selected_adapter] : octets_null;
         err_log("port bound at %d.%d.%d.%d:%d\n", (int)octets[0], (int)octets[1], (int)octets[2], (int)octets[3], ntr_rp_port_bound);
         ntr_rp_port_changed = 0;
         ntr_rp_port = ntr_rp_port_bound;

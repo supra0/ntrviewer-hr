@@ -156,7 +156,7 @@ enum frame_buffer_status_t
 
 #include <SDL2/SDL.h>
 #define SDL_WIN_FLAGS_DEFAULT (SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN)
-#define WIN_TITLE "NTRViewer HR"
+#define WIN_TITLE "NTRViewer-HR"
 
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT0 400

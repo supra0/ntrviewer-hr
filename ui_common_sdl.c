@@ -3,6 +3,7 @@
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
 #include "main.h"
+#include "ikcp.h"
 
 enum ui_renderer_t ui_renderer;
 SDL_Window *ui_sdl_win[SCREEN_COUNT];
@@ -135,6 +136,140 @@ void ui_window_size_update(int window_top_bot) {
         ui_nk_width = ui_win_width[i];
         ui_nk_height = ui_win_height[i];
         ui_nk_scale = ui_win_scale[i];
+    }
+}
+
+#define FRAME_STAT_EVERY_X_US 1000000
+static uint64_t windows_titles_last_tick;
+#define WINDOW_TITLE_LEN_MAX 512
+
+static double kcp_get_connection_quality(void)
+{
+    int input_count = __atomic_load_n(&kcp_input_count, __ATOMIC_RELAXED);
+    double ret = input_count ? (double)__atomic_load_n(&kcp_recv_pid_count, __ATOMIC_RELAXED) / input_count : 0.0;
+    return ret * ret * 100;
+}
+
+static void ui_kcp_window_title_update(SDL_Window *win, int tick_diff)
+{
+    char window_title[WINDOW_TITLE_LEN_MAX];
+    snprintf(window_title, sizeof(window_title),
+             WIN_TITLE " (FPS %03d %03d | %03d %03d)"
+                       " (Connection Quality %.1f%%)"
+                       " [Reliable Stream Mode]",
+             __atomic_load_n(&frame_rate_decoded_tracker[SCREEN_TOP], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+             __atomic_load_n(&frame_rate_decoded_tracker[SCREEN_BOT], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+             __atomic_load_n(&frame_rate_displayed_tracker[SCREEN_TOP], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+             __atomic_load_n(&frame_rate_displayed_tracker[SCREEN_BOT], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+             kcp_get_connection_quality());
+    SDL_SetWindowTitle(win, window_title);
+}
+
+static void ui_kcp_windows_titles_update(int ctx_top_bot, int screen_top_bot, int tick_diff)
+{
+    char window_title[WINDOW_TITLE_LEN_MAX];
+    snprintf(window_title, sizeof(window_title),
+             ctx_top_bot == SCREEN_TOP
+                 ? WIN_TITLE
+                 " (FPS %03d | %03d)"
+                 " (Connection Quality %.1f%%)"
+                 " [Reliable Stream Mode]"
+                 : WIN_TITLE
+                 " (FPS %03d | %03d)",
+             __atomic_load_n(&frame_rate_decoded_tracker[screen_top_bot], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / tick_diff,
+             __atomic_load_n(&frame_rate_displayed_tracker[screen_top_bot], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / tick_diff,
+             kcp_get_connection_quality());
+    SDL_SetWindowTitle(ui_sdl_win[ctx_top_bot], window_title);
+}
+
+void ui_windows_titles_update(void)
+{
+    uint64_t next_tick = iclock64();
+    uint64_t tick_diff = next_tick - windows_titles_last_tick;
+    if (tick_diff >= FRAME_STAT_EVERY_X_US)
+    {
+        int frame_fully_received = __atomic_load_n(&frame_fully_received_tracker, __ATOMIC_RELAXED);
+        int frame_lost = __atomic_load_n(&frame_lost_tracker, __ATOMIC_RELAXED);
+        double packet_rate = frame_fully_received ? (double)frame_fully_received / (frame_fully_received + frame_lost) * 100 : 0.0;
+
+        int view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
+
+        if (view_mode == VIEW_MODE_TOP_BOT)
+        {
+            if (kcp_active)
+            {
+                ui_kcp_window_title_update(ui_sdl_win[SCREEN_TOP], (int)tick_diff);
+            }
+            else
+            {
+                char window_title[WINDOW_TITLE_LEN_MAX];
+                snprintf(
+                    window_title, sizeof(window_title),
+                    WIN_TITLE
+                    " (FPS %03d %03d | %03d %03d)"
+                    " (Packet Rate %.1f%%)"
+                    " [Compatibility Mode]",
+                    __atomic_load_n(&frame_rate_decoded_tracker[SCREEN_TOP], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                    __atomic_load_n(&frame_rate_decoded_tracker[SCREEN_BOT], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                    __atomic_load_n(&frame_rate_displayed_tracker[SCREEN_TOP], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                    __atomic_load_n(&frame_rate_displayed_tracker[SCREEN_BOT], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                    packet_rate);
+                SDL_SetWindowTitle(ui_sdl_win[SCREEN_TOP], window_title);
+            }
+        }
+        else
+        {
+            for (int screen_top_bot = 0; screen_top_bot < SCREEN_COUNT; ++screen_top_bot)
+            {
+                int ctx_top_bot = screen_top_bot;
+                if (view_mode == VIEW_MODE_BOT)
+                {
+                    ctx_top_bot = SCREEN_TOP;
+                    screen_top_bot = SCREEN_BOT;
+                }
+                if (kcp_active)
+                {
+                    ui_kcp_windows_titles_update(ctx_top_bot, screen_top_bot, (int)tick_diff);
+                }
+                else
+                {
+                    char window_title[WINDOW_TITLE_LEN_MAX];
+                    snprintf(
+                        window_title, sizeof(window_title),
+                        ctx_top_bot == SCREEN_TOP
+                            ? WIN_TITLE
+                            " (FPS %03d | %03d) "
+                            " (Packet Rate %.1f%%)"
+                            " [Compatibility Mode]"
+                            : WIN_TITLE
+                            " (FPS %03d | %03d) ",
+                        __atomic_load_n(&frame_rate_decoded_tracker[screen_top_bot], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                        __atomic_load_n(&frame_rate_displayed_tracker[screen_top_bot], __ATOMIC_RELAXED) * FRAME_STAT_EVERY_X_US / (int)tick_diff,
+                        packet_rate);
+                    SDL_SetWindowTitle(ui_sdl_win[ctx_top_bot], window_title);
+                }
+                if (view_mode != VIEW_MODE_SEPARATE)
+                {
+                    break;
+                }
+            }
+        }
+
+        windows_titles_last_tick = next_tick;
+        for (int top_bot = 0; top_bot < SCREEN_COUNT; ++top_bot)
+        {
+            __atomic_store_n(&frame_rate_decoded_tracker[top_bot], 0, __ATOMIC_RELAXED);
+            __atomic_store_n(&frame_rate_displayed_tracker[top_bot], 0, __ATOMIC_RELAXED);
+            __atomic_store_n(&frame_size_tracker[top_bot], 0, __ATOMIC_RELAXED);
+            __atomic_store_n(&delay_between_packet_tracker[top_bot], 0, __ATOMIC_RELAXED);
+        }
+        __atomic_store_n(&kcp_input_count, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&kcp_input_fid_count, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&kcp_input_pid_count, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&kcp_recv_pid_count, 0, __ATOMIC_RELAXED);
+
+        __atomic_store_n(&frame_fully_received_tracker, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&frame_lost_tracker, 0, __ATOMIC_RELAXED);
     }
 }
 

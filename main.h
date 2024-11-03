@@ -18,6 +18,8 @@ extern atomic_bool program_running;
 
 extern bool renderer_single_thread;
 extern bool renderer_evt_sync;
+extern bool nk_gui_next;
+extern bool nk_input_current;
 
 void itimeofday(int64_t *sec, int64_t *usec);
 

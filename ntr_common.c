@@ -14,7 +14,7 @@ int socket_shutdown(void) {
 }
 #endif
 
-atomic_int ntr_rp_port = 8001;
+int ntr_rp_port = 8001;
 atomic_int ntr_rp_port_bound;
 atomic_bool ntr_rp_port_changed;
 
@@ -109,9 +109,9 @@ fail:
 int ntr_selected_ip;
 int ntr_selected_adapter;
 
-char **ntr_adaptor_list;
-uint8_t **ntr_adaptor_octet_list;
-int ntr_adaptor_count;
+char **ntr_adapter_list;
+uint8_t **ntr_adapter_octet_list;
+int ntr_adapter_count;
 
 // taken from Boop's source code https://github.com/miltoncandelero/Boop
 static uint8_t const known_mac_list[][3] = {
@@ -129,74 +129,74 @@ static uint8_t const known_mac_list[][3] = {
     { 0xE0, 0xE7, 0x51 }, { 0xE8, 0x4E, 0xCE }, { 0xEC, 0xC4, 0x0D }, { 0xE8, 0x4E, 0xCE }
 };
 
-static void ntr_free_adaptor_list(void) {
-    if(ntr_adaptor_count) {
-        for (int i = 0; i < ntr_adaptor_count; ++i) {
-            free(ntr_adaptor_list[i]);
-            free(ntr_adaptor_octet_list[i]);
+static void ntr_free_adapter_list(void) {
+    if(ntr_adapter_count) {
+        for (int i = 0; i < ntr_adapter_count; ++i) {
+            free(ntr_adapter_list[i]);
+            free(ntr_adapter_octet_list[i]);
         }
-        free(ntr_adaptor_list);
-        free(ntr_adaptor_octet_list);
-        ntr_adaptor_list = 0;
-        ntr_adaptor_octet_list = 0;
-        ntr_adaptor_count = 0;
+        free(ntr_adapter_list);
+        free(ntr_adapter_octet_list);
+        ntr_adapter_list = 0;
+        ntr_adapter_octet_list = 0;
+        ntr_adapter_count = 0;
     }
 }
 
-static int ntr_alloc_adaptor_list(int count) {
+static int ntr_alloc_adapter_list(int count) {
     if (count) {
-        ntr_adaptor_list = malloc(sizeof(*ntr_adaptor_list) * count);
-        if (!ntr_adaptor_list) {
-            err_log("malloc ntr_adaptor_list failed\n");
+        ntr_adapter_list = malloc(sizeof(*ntr_adapter_list) * count);
+        if (!ntr_adapter_list) {
+            err_log("malloc ntr_adapter_list failed\n");
             goto fail;
         }
-        memset(ntr_adaptor_list, 0, sizeof(*ntr_adaptor_list) * count);
+        memset(ntr_adapter_list, 0, sizeof(*ntr_adapter_list) * count);
 
-        ntr_adaptor_octet_list = malloc(sizeof(*ntr_adaptor_octet_list) * count);
-        if (!ntr_adaptor_octet_list) {
-            err_log("malloc ntr_adaptor_octet_list failed\n");
+        ntr_adapter_octet_list = malloc(sizeof(*ntr_adapter_octet_list) * count);
+        if (!ntr_adapter_octet_list) {
+            err_log("malloc ntr_adapter_octet_list failed\n");
             goto fail;
         }
-        memset(ntr_adaptor_octet_list, 0, sizeof(*ntr_adaptor_octet_list) * count);
+        memset(ntr_adapter_octet_list, 0, sizeof(*ntr_adapter_octet_list) * count);
 
         for (int i = 0; i < count; ++i) {
-            ntr_adaptor_list[i] = malloc(NTR_IP_NAME_LEN_MAX);
-            if (!ntr_adaptor_list[i]) {
-                err_log("malloc ntr_adaptor_list[i] failed\n");
+            ntr_adapter_list[i] = malloc(NTR_IP_NAME_LEN_MAX);
+            if (!ntr_adapter_list[i]) {
+                err_log("malloc ntr_adapter_list[i] failed\n");
                 goto fail;
             }
 
-            ntr_adaptor_octet_list[i] = malloc(NTR_IP_OCTET_SIZE);
-            if (!ntr_adaptor_octet_list[i]) {
-                err_log("malloc ntr_adaptor_octet_list[i] failed\n");
+            ntr_adapter_octet_list[i] = malloc(NTR_IP_OCTET_SIZE);
+            if (!ntr_adapter_octet_list[i]) {
+                err_log("malloc ntr_adapter_octet_list[i] failed\n");
                 goto fail;
             }
         }
-        ntr_adaptor_count = count;
+        ntr_adapter_count = count;
     }
     return 0;
 
 fail:
-    if (ntr_adaptor_list) {
+    if (ntr_adapter_list) {
         for (int i = 0; i < count; ++i) {
-            if (ntr_adaptor_list[i]) {
-                free(ntr_adaptor_list[i]);
+            if (ntr_adapter_list[i]) {
+                free(ntr_adapter_list[i]);
             }
         }
 
-        free(ntr_adaptor_list);
-        ntr_adaptor_list = 0;
+        free(ntr_adapter_list);
+        ntr_adapter_list = 0;
     }
 
-    if (ntr_adaptor_octet_list) {
+    if (ntr_adapter_octet_list) {
         for (int i = 0; i < count; ++i) {
-            if (ntr_adaptor_octet_list[i]) {
-                free(ntr_adaptor_octet_list[i]);
+            if (ntr_adapter_octet_list[i]) {
+                free(ntr_adapter_octet_list[i]);
             }
         }
 
-        free(ntr_adaptor_octet_list);
-        ntr_adaptor_octet_list = 0;
+        free(ntr_adapter_octet_list);
+        ntr_adapter_octet_list = 0;
     }
 
     return -1;
@@ -204,11 +204,11 @@ fail:
 
 atomic_uint_fast8_t ntr_ip_octet[NTR_IP_OCTET_SIZE];
 
-void ntr_try_auto_select_adaptor(void) {
+void ntr_try_auto_select_adapter(void) {
     ntr_selected_adapter = 0;
     uint32_t count = 0;
-    for (int i = NTR_ADAPTOR_PRE_COUNT; i < ntr_adaptor_count - NTR_ADAPTOR_POST_COUNT; ++i) {
-        uint32_t bits = __builtin_bswap32(*(uint32_t *)ntr_ip_octet & *(uint32_t *)ntr_adaptor_octet_list[i]);
+    for (int i = NTR_adapter_PRE_COUNT; i < ntr_adapter_count - NTR_adapter_POST_COUNT; ++i) {
+        uint32_t bits = __builtin_bswap32(*(uint32_t *)ntr_ip_octet & *(uint32_t *)ntr_adapter_octet_list[i]);
         if (/*(int)bits < 0 && */bits > count) {
             count = bits;
             ntr_selected_adapter = i;
@@ -322,7 +322,7 @@ static uint32_t parse_ip_address(const char *ip) {
     return inet_addr(ip);
 }
 
-static int get_adaptor_count(void) {
+static int get_adapter_count(void) {
     int count = 0;
     if (adapter_info_list && adapter_info_list_size) {
         PIP_ADAPTER_INFO next = adapter_info_list;
@@ -340,16 +340,16 @@ static int get_adaptor_count(void) {
 }
 
 static void update_adapter_list(void) {
-    ntr_free_adaptor_list();
+    ntr_free_adapter_list();
 
-    int count = get_adaptor_count();
+    int count = get_adapter_count();
 
-    if (ntr_alloc_adaptor_list(count + NTR_ADAPTOR_EXTRA_COUNT)) {
+    if (ntr_alloc_adapter_list(count + NTR_adapter_EXTRA_COUNT)) {
         goto fail;
     }
 
-    strcpy(ntr_adaptor_list[0], "0.0.0.0 (Any)");
-    memset(ntr_adaptor_octet_list[0], 0, NTR_IP_OCTET_SIZE);
+    strcpy(ntr_adapter_list[0], "0.0.0.0 (Any)");
+    memset(ntr_adapter_octet_list[0], 0, NTR_IP_OCTET_SIZE);
 
     if (adapter_info_list && adapter_info_list_size) {
         PIP_ADAPTER_INFO next = adapter_info_list;
@@ -358,8 +358,8 @@ static void update_adapter_list(void) {
             while (ip) {
                 int addr;
                 if ((addr = parse_ip_address(ip->IpAddress.String)) != 0) {
-                    sprintf(ntr_adaptor_list[i + NTR_ADAPTOR_PRE_COUNT], "%s", ip->IpAddress.String);
-                    memcpy(ntr_adaptor_octet_list[i + NTR_ADAPTOR_PRE_COUNT], &addr, NTR_IP_OCTET_SIZE);
+                    sprintf(ntr_adapter_list[i + NTR_adapter_PRE_COUNT], "%s", ip->IpAddress.String);
+                    memcpy(ntr_adapter_octet_list[i + NTR_adapter_PRE_COUNT], &addr, NTR_IP_OCTET_SIZE);
                     ++i;
                 }
                 ip = ip->Next;
@@ -368,13 +368,13 @@ static void update_adapter_list(void) {
         }
     }
 
-    strcpy(ntr_adaptor_list[NTR_ADAPTOR_PRE_COUNT + count + NTR_ADAPTOR_POST_AUTO], "Auto-Select");
-    memset(ntr_adaptor_octet_list[1 + count], 0, NTR_IP_OCTET_SIZE);
+    strcpy(ntr_adapter_list[NTR_adapter_PRE_COUNT + count + NTR_adapter_POST_AUTO], "Auto-Select");
+    memset(ntr_adapter_octet_list[1 + count], 0, NTR_IP_OCTET_SIZE);
 
-    strcpy(ntr_adaptor_list[NTR_ADAPTOR_PRE_COUNT + count + NTR_ADAPTOR_POST_REFRESH], "Refresh List");
-    memset(ntr_adaptor_octet_list[1 + count + 1], 0, NTR_IP_OCTET_SIZE);
+    strcpy(ntr_adapter_list[NTR_adapter_PRE_COUNT + count + NTR_adapter_POST_REFRESH], "Refresh List");
+    memset(ntr_adapter_octet_list[1 + count + 1], 0, NTR_IP_OCTET_SIZE);
 
-    ntr_try_auto_select_adaptor();
+    ntr_try_auto_select_adapter();
 
     return;
 
