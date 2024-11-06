@@ -19,13 +19,47 @@
 atomic_bool program_running;
 #ifdef _WIN32
 static OSVERSIONINFO osvi;
+static int64_t qpc_freq = 1;
 #endif
+
+void itimeofday(int64_t *sec, int64_t *usec)
+{
+#ifdef _WIN32
+    int64_t qpc;
+    if (!QueryPerformanceCounter((LARGE_INTEGER *)&qpc))
+    {
+        program_running = 0;
+        *sec = *usec = 0;
+        return;
+    }
+    if (sec)
+        *sec = (int64_t)(qpc / qpc_freq);
+    if (usec)
+        *usec = (int64_t)((qpc % qpc_freq) * 1000000 / qpc_freq);
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+    {
+        running = 0;
+        *sec = *usec = 0;
+        return;
+    }
+    if (sec)
+        *sec = ts.tv_sec;
+    if (usec)
+        *usec = ts.tv_nsec / 1000;
+#endif
+}
 
 static void main_init() {
 #ifdef _WIN32
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
     GetVersionEx(&osvi);
     err_log("Windows version %d.%d.%d\n", (int)osvi.dwMajorVersion, (int)osvi.dwMinorVersion, (int)osvi.dwBuildNumber);
+
+    if (!QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq)) {
+    }
+    qpc_freq = (qpc_freq == 0) ? 1 : qpc_freq;
 #endif
 
     RO_INIT();
@@ -788,48 +822,4 @@ int main(int argc, char **argv) {
     main_destroy();
 
     return 0;
-}
-
-#ifdef _WIN32
-static bool qpc_mode = 0;
-static int64_t qpc_freq = 1;
-#endif
-void itimeofday(int64_t *sec, int64_t *usec)
-{
-#ifdef _WIN32
-    int64_t qpc;
-    if (__atomic_load_n(&qpc_mode, __ATOMIC_ACQUIRE) == 0)
-    {
-        if (!QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq))
-        {
-            program_running = 0;
-            *sec = *usec = 0;
-            return;
-        }
-        qpc_freq = (qpc_freq == 0) ? 1 : qpc_freq;
-        __atomic_store_n(&qpc_mode, 1, __ATOMIC_RELEASE);
-    }
-    if (!QueryPerformanceCounter((LARGE_INTEGER *)&qpc))
-    {
-        program_running = 0;
-        *sec = *usec = 0;
-        return;
-    }
-    if (sec)
-        *sec = (int64_t)(qpc / qpc_freq);
-    if (usec)
-        *usec = (int64_t)((qpc % qpc_freq) * 1000000 / qpc_freq);
-#else
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
-    {
-        running = 0;
-        *sec = *usec = 0;
-        return;
-    }
-    if (sec)
-        *sec = ts.tv_sec;
-    if (usec)
-        *usec = ts.tv_nsec / 1000;
-#endif
 }
