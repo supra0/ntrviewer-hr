@@ -1,7 +1,8 @@
+#include "rp_syn.h"
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
-#include "rp_syn.h"
+#include "const.h"
 
 #ifdef _WIN32
 #include <versionhelpers.h>
@@ -55,7 +56,7 @@ int rp_syn_close1(struct rp_syn_comp_func_t *syn1) {
 	return ret;
 }
 
-int rp_syn_acq(struct rp_syn_comp_func_t *syn1, unsigned timeout_ns, void **pos, rp_e_t e) {
+int rp_syn_acq(struct rp_syn_comp_func_t *syn1, unsigned timeout_ns, void **pos, UNUSED rp_e_t e) {
 	int res;
 	if ((res = rp_sem_timedwait(syn1->sem, timeout_ns, e)) != 0) {
 		if (res != ETIMEDOUT)
@@ -90,7 +91,7 @@ int rp_syn_rel(struct rp_syn_comp_func_t *syn1, void *pos) {
 	return res;
 }
 
-int rp_syn_acq1(struct rp_syn_comp_func_t *syn1, unsigned timeout_ns, void **pos, rp_e_t e) {
+int rp_syn_acq1(struct rp_syn_comp_func_t *syn1, unsigned timeout_ns, void **pos, UNUSED rp_e_t e) {
 	int res;
 	if ((res = rp_sem_timedwait(syn1->sem, timeout_ns, e)) != 0) {
 		if (res != ETIMEDOUT)

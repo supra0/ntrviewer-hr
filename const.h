@@ -60,7 +60,7 @@ typedef int SOCKET;
 #define WSAPoll poll
 #define SD_BOTH SHUT_RDWR
 
-void Sleep(int milliseconds) {
+UNUSED static void Sleep(int milliseconds) {
     struct timespec ts;
     ts.tv_sec = milliseconds / 1000;
     ts.tv_nsec = (milliseconds % 1000) * 1000000;

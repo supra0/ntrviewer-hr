@@ -13,11 +13,17 @@ enum nk_nav_t nk_nav_cmd;
 static struct nk_style nk_style_current;
 
 #include "nuklear_sdl_renderer.h"
+#ifdef _WIN32
 #include "nuklear_d3d11.h"
+#endif
+
+#include <limits.h>
 
 void nk_font_stash_begin(struct nk_font_atlas **atlas) {
     if (is_renderer_d3d11()) {
+#ifdef _WIN32
         nk_d3d11_font_stash_begin(atlas);
+#endif
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_begin(atlas);
     }
@@ -25,7 +31,9 @@ void nk_font_stash_begin(struct nk_font_atlas **atlas) {
 
 void nk_font_stash_end(void) {
     if (is_renderer_d3d11()) {
+#ifdef _WIN32
         nk_d3d11_font_stash_end();
+#endif
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_end();
     }
@@ -565,11 +573,11 @@ void ui_main_nk(void)
         {
             set_nav_combobox_prev(NK_FOCUS_VIEWER_IP);
             ntr_selected_adapter = selected;
-            if (ntr_selected_adapter == ntr_adapter_count - NTR_adapter_POST_COUNT + NTR_adapter_POST_AUTO)
+            if (ntr_selected_adapter == ntr_adapter_count - NTR_ADAPTER_POST_COUNT + NTR_ADAPTER_POST_AUTO)
             {
                 ntr_try_auto_select_adapter();
             }
-            else if (ntr_selected_adapter == ntr_adapter_count - NTR_adapter_POST_COUNT + NTR_adapter_POST_REFRESH)
+            else if (ntr_selected_adapter == ntr_adapter_count - NTR_ADAPTER_POST_COUNT + NTR_ADAPTER_POST_REFRESH)
             {
                 ntr_get_adapter_list();
             } else {

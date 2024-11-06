@@ -3,6 +3,7 @@
 
 #define NTR_IP_NAME_LEN_MAX (32)
 #define NTR_IP_OCTET_SIZE (4)
+#define NTR_MAC_SIZE (6)
 
 #ifdef _WIN32
 int socket_startup(void) {
@@ -207,7 +208,7 @@ atomic_uint_fast8_t ntr_ip_octet[NTR_IP_OCTET_SIZE];
 void ntr_try_auto_select_adapter(void) {
     ntr_selected_adapter = 0;
     uint32_t count = 0;
-    for (int i = NTR_adapter_PRE_COUNT; i < ntr_adapter_count - NTR_adapter_POST_COUNT; ++i) {
+    for (int i = NTR_ADAPTER_PRE_COUNT; i < ntr_adapter_count - NTR_ADAPTER_POST_COUNT; ++i) {
         uint32_t bits = __builtin_bswap32(*(uint32_t *)ntr_ip_octet & *(uint32_t *)ntr_adapter_octet_list[i]);
         if (/*(int)bits < 0 && */bits > count) {
             count = bits;
@@ -218,6 +219,8 @@ void ntr_try_auto_select_adapter(void) {
     ntr_rp_port_changed = 1;
     kcp_restart = 1;
 }
+
+#define NTR_AUTO_IP_PRE_COUNT (1)
 
 #ifdef _WIN32
 #include <iphlpapi.h>
@@ -263,8 +266,6 @@ static int match_mac(UCHAR *mac) {
     return 0;
 }
 
-#define NTR_AUTO_IP_PRE_COUNT (1)
-
 void ntr_detect_3ds_ip(void) {
     get_ip_map_mac();
 
@@ -279,7 +280,7 @@ void ntr_detect_3ds_ip(void) {
         for (unsigned i = 0; i < ip_net_buf->dwNumEntries; ++i) {
             PMIB_IPNETROW entry = &ip_net_buf->table[i];
             if (entry->dwType != MIB_IPNET_TYPE_INVALID) {
-                if (entry->dwPhysAddrLen == 6) {
+                if (entry->dwPhysAddrLen == NTR_MAC_SIZE) {
                     if (match_mac(entry->bPhysAddr)) {
                         map_index[detected_ip_count] = i;
                         ++detected_ip_count;
@@ -347,7 +348,7 @@ static void update_adapter_list(void) {
 
     int count = get_adapter_count();
 
-    if (ntr_alloc_adapter_list(count + NTR_adapter_EXTRA_COUNT)) {
+    if (ntr_alloc_adapter_list(count + NTR_ADAPTER_EXTRA_COUNT)) {
         goto fail;
     }
 
@@ -361,8 +362,8 @@ static void update_adapter_list(void) {
             while (ip) {
                 int addr;
                 if ((addr = parse_ip_address(ip->IpAddress.String)) != 0) {
-                    sprintf(ntr_adapter_list[i + NTR_adapter_PRE_COUNT], "%s", ip->IpAddress.String);
-                    memcpy(ntr_adapter_octet_list[i + NTR_adapter_PRE_COUNT], &addr, NTR_IP_OCTET_SIZE);
+                    sprintf(ntr_adapter_list[i + NTR_ADAPTER_PRE_COUNT], "%s", ip->IpAddress.String);
+                    memcpy(ntr_adapter_octet_list[i + NTR_ADAPTER_PRE_COUNT], &addr, NTR_IP_OCTET_SIZE);
                     ++i;
                 }
                 ip = ip->Next;
@@ -371,11 +372,11 @@ static void update_adapter_list(void) {
         }
     }
 
-    strcpy(ntr_adapter_list[NTR_adapter_PRE_COUNT + count + NTR_adapter_POST_AUTO], "Auto-Select");
-    memset(ntr_adapter_octet_list[1 + count], 0, NTR_IP_OCTET_SIZE);
+    strcpy(ntr_adapter_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_AUTO], "Auto-Select");
+    memset(ntr_adapter_octet_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_AUTO], 0, NTR_IP_OCTET_SIZE);
 
-    strcpy(ntr_adapter_list[NTR_adapter_PRE_COUNT + count + NTR_adapter_POST_REFRESH], "Refresh List");
-    memset(ntr_adapter_octet_list[1 + count + 1], 0, NTR_IP_OCTET_SIZE);
+    strcpy(ntr_adapter_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_REFRESH], "Refresh List");
+    memset(ntr_adapter_octet_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_REFRESH], 0, NTR_IP_OCTET_SIZE);
 
     ntr_try_auto_select_adapter();
 
@@ -419,5 +420,214 @@ fail:
     return;
 }
 #else
-#error TODO
+
+// Taken from stackexchange
+// https://codereview.stackexchange.com/a/58107
+#include <stdio.h>
+
+#define xstr(s) str(s)
+#define str(s) #s
+
+#define ARP_CACHE "/proc/net/arp"
+#define ARP_STRING_LEN 1023
+#define ARP_BUFFER_LEN (ARP_STRING_LEN + 1)
+#define ARP_LINE_FORMAT \
+    "%" xstr(ARP_STRING_LEN) "s %*s %*s " \
+    "%" xstr(ARP_STRING_LEN) "s %*s " \
+    "%" xstr(ARP_STRING_LEN) "s"
+
+struct ip_map_mac_t {
+    uint8_t ip_bytes[NTR_IP_OCTET_SIZE];
+    uint8_t mac_bytes[NTR_MAC_SIZE];
+};
+
+static struct ip_map_mac_t *ip_net_buf = 0;
+static size_t ip_net_buf_count = 0;
+
+static void get_ip_map_mac(void)
+{
+    if (ip_net_buf) {
+        free(ip_net_buf);
+        ip_net_buf = 0;
+        ip_net_buf_count = 0;
+    }
+
+    FILE *arp_cache = fopen(ARP_CACHE, "r");
+    if (!arp_cache)
+        return;
+
+    /* Ignore the first line, which contains the header */
+    char header[ARP_BUFFER_LEN];
+    if (!fgets(header, sizeof(header), arp_cache))
+        goto final;
+
+    int beg = ftell(arp_cache);
+
+    char ip_addr[ARP_BUFFER_LEN], hw_addr[ARP_BUFFER_LEN], device[ARP_BUFFER_LEN];
+    int count = 0;
+    while (3 == fscanf(arp_cache, ARP_LINE_FORMAT, ip_addr, hw_addr, device))
+        ++count;
+
+    ip_net_buf = calloc(count, sizeof(struct ip_map_mac_t));
+    if (ip_net_buf) {
+        fseek(arp_cache, beg, SEEK_SET);
+        int count = 0;
+        while (3 == fscanf(arp_cache, ARP_LINE_FORMAT, ip_addr, hw_addr, device)) {
+            struct ip_map_mac_t *b = &ip_net_buf[count];
+            sscanf(ip_addr, "%hhu.%hhu.%hhu.%hhu",
+                   &b->ip_bytes[0],
+                   &b->ip_bytes[1],
+                   &b->ip_bytes[2],
+                   &b->ip_bytes[3]);
+            sscanf(hw_addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &b->mac_bytes[0],
+                   &b->mac_bytes[1],
+                   &b->mac_bytes[2],
+                   &b->mac_bytes[3],
+                   &b->mac_bytes[4],
+                   &b->mac_bytes[5]);
+            ++count;
+        }
+        ip_net_buf_count = count;
+    }
+
+final:
+    fclose(arp_cache);
+    return;
+}
+
+static int match_mac(uint8_t *mac)
+{
+    for (unsigned i = 0; i < sizeof(known_mac_list) / sizeof(*known_mac_list); ++i) {
+        if (memcmp(mac, known_mac_list[i], 3) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+void ntr_detect_3ds_ip(void)
+{
+    get_ip_map_mac();
+
+    unsigned detected_ip_count = 0;
+    unsigned *map_index = 0;
+    if (ip_net_buf_count) {
+        map_index = malloc(ip_net_buf_count * sizeof(*map_index));
+        for (unsigned i = 0; i < ip_net_buf_count; ++i) {
+            if (match_mac(ip_net_buf[i].mac_bytes)) {
+                map_index[detected_ip_count] = i;
+                ++detected_ip_count;
+            }
+        }
+    }
+
+    ntr_free_auto_ip_list();
+    ntr_alloc_auto_ip_list(detected_ip_count + NTR_AUTO_IP_PRE_COUNT);
+
+    if (detected_ip_count) {
+        strcpy(ntr_auto_ip_list[0], "");
+    } else {
+        strcpy(ntr_auto_ip_list[0], "None Detected");
+    }
+    memset(ntr_auto_ip_octet_list[0], 0, NTR_IP_OCTET_SIZE);
+
+    for (unsigned i = 0; i < detected_ip_count; ++i) {
+        struct ip_map_mac_t *b = &ip_net_buf[map_index[i]];
+        sprintf(ntr_auto_ip_list[i + NTR_AUTO_IP_PRE_COUNT], "%d.%d.%d.%d",
+                (int)b->ip_bytes[0],
+                (int)b->ip_bytes[1],
+                (int)b->ip_bytes[2],
+                (int)b->ip_bytes[3]);
+        memcpy(ntr_auto_ip_octet_list[i + NTR_AUTO_IP_PRE_COUNT], b->ip_bytes, NTR_IP_OCTET_SIZE);
+    }
+    free(map_index);
+
+    ntr_selected_ip = detected_ip_count ? NTR_AUTO_IP_PRE_COUNT : 0;
+    memcpy(ntr_ip_octet, ntr_auto_ip_octet_list[ntr_selected_ip], NTR_IP_OCTET_SIZE);
+}
+
+// Taken from stackoverflow
+// https://stackoverflow.com/a/12131131
+#include <ifaddrs.h>
+#include <netdb.h>
+
+void ntr_get_adapter_list(void)
+{
+    ntr_free_adapter_list();
+
+    int count = 0;
+
+    struct ifaddrs *ifaddr = 0, *ifa;
+    if (getifaddrs(&ifaddr) != -1) {
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL)
+                continue;
+
+            char host[NI_MAXHOST] = {0};
+            int s = getnameinfo(
+                ifa->ifa_addr,
+                sizeof(struct sockaddr_in),
+                host,
+                NI_MAXHOST,
+                NULL,
+                0,
+                NI_NUMERICHOST);
+
+            if (s == 0)
+                ++count;
+        }
+    }
+
+    ntr_alloc_adapter_list(count + NTR_ADAPTER_EXTRA_COUNT);
+
+    strcpy(ntr_adapter_list[0], "0.0.0.0 (Any)");
+    memset(ntr_adapter_octet_list[0], 0, NTR_IP_OCTET_SIZE);
+
+    if (count) {
+        int i = NTR_ADAPTER_PRE_COUNT;
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL)
+                continue;
+
+            char host[NI_MAXHOST] = {0};
+            int s = getnameinfo(
+                ifa->ifa_addr,
+                sizeof(struct sockaddr_in),
+                host,
+                NI_MAXHOST,
+                NULL,
+                0,
+                NI_NUMERICHOST);
+
+            if (s == 0) {
+                sscanf(host, "%hhu.%hhu.%hhu.%hhu",
+                       &ntr_adapter_octet_list[i][0],
+                       &ntr_adapter_octet_list[i][1],
+                       &ntr_adapter_octet_list[i][2],
+                       &ntr_adapter_octet_list[i][3]);
+                sprintf(
+                    ntr_adapter_list[i],
+                    "%d.%d.%d.%d",
+                    (int)ntr_adapter_octet_list[i][0],
+                    (int)ntr_adapter_octet_list[i][1],
+                    (int)ntr_adapter_octet_list[i][2],
+                    (int)ntr_adapter_octet_list[i][3]);
+
+                ++i;
+            }
+        }
+    }
+
+    if (ifaddr) {
+        freeifaddrs(ifaddr);
+    }
+
+    strcpy(ntr_adapter_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_AUTO], "Auto-Select");
+    memset(ntr_adapter_octet_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_AUTO], 0, NTR_IP_OCTET_SIZE);
+
+    strcpy(ntr_adapter_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_REFRESH], "Refresh List");
+    memset(ntr_adapter_octet_list[NTR_ADAPTER_PRE_COUNT + count + NTR_ADAPTER_POST_REFRESH], 0, NTR_IP_OCTET_SIZE);
+
+    ntr_try_auto_select_adapter();
+}
 #endif

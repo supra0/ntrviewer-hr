@@ -125,7 +125,7 @@ nuklear/stb_%.o: nuklear/stb_%.c
 	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS)
 
 %.o: %.c
-	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS)
+	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -D_GNU_SOURCE
 
 -include $(TARGET_DEP)
 

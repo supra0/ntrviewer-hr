@@ -124,7 +124,8 @@ extern pthread_condattr_t rp_cond_attr;
 #define rp_sem_create(n, i, m) rp_sem_init(n, i)
 #define rp_sem_init(n, i) sem_init(&(n), 0, i)
 #define rp_sem_timedwait(n, to_ns, e) ({ \
-	int _ret = sem_wait(&(n)); \
+	struct timespec _to = clock_monotonic_abs_ns_from_now(to_ns); \
+	int _ret = sem_clockwait(&(n), CLOCK_MONOTONIC, &_to); \
 	if (_ret) { _ret = errno; } \
 	_ret; \
 })

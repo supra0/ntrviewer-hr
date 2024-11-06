@@ -5,14 +5,16 @@
 #include "ui_renderer_sdl.h"
 #include "ui_renderer_d3d11.h"
 #include "ntr_common.h"
+#ifdef _WIN32
 #include "nuklear_d3d11.h"
+#include "ui_compositor_csc.h"
+#endif
 #include "nuklear_sdl_gl3.h"
 #include "nuklear_sdl_gles2.h"
 #include "nuklear_sdl_renderer.h"
 #include "ntr_hb.h"
 #include "ntr_rp.h"
 #include "ui_main_nk.h"
-#include "ui_compositor_csc.h"
 
 #include <math.h>
 
@@ -40,7 +42,7 @@ void itimeofday(int64_t *sec, int64_t *usec)
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
     {
-        running = 0;
+        program_running = 0;
         *sec = *usec = 0;
         return;
     }
@@ -86,7 +88,7 @@ bool renderer_evt_sync;
 
 #include <getopt.h>
 
-static int opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, opt_flag_sdl_hw, opt_flag_sdl_sw;
+static int UNUSED opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, opt_flag_sdl_hw, opt_flag_sdl_sw;
 
 #define opt_name_d3d "d3d"
 #define opt_name_ogl "ogl"
@@ -99,13 +101,15 @@ static int opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_n
 #define mod_name_csc "csc"
 
 static struct option long_options[] = {
+#ifdef _WIN32
+    {opt_name_no_csc, no_argument, &opt_flag_no_csc, 1},
     {opt_name_d3d, no_argument, &opt_flag_d3d, 1},
+#endif
     {opt_name_ogl, no_argument, &opt_flag_ogl, 1},
     {opt_name_gles, no_argument, &opt_flag_gles, 1},
     {opt_name_angle, no_argument, &opt_flag_angle, 1},
     {opt_name_sdl_hw, no_argument, &opt_flag_sdl_hw, 1},
     {opt_name_sdl_sw, no_argument, &opt_flag_sdl_sw, 1},
-    {opt_name_no_csc, no_argument, &opt_flag_no_csc, 1},
     {0, 0, 0, 0}};
 
 static void add_arg(enum ui_renderer_t arg, const char *name) {
@@ -744,6 +748,8 @@ static void main_windows(void) {
         SetWindowLongPtrA(ui_hwnd[i], GWLP_WNDPROC, (LONG_PTR)main_window_proc);
         SetClassLongPtr(ui_hwnd[i], GCLP_HBRBACKGROUND, (LONG_PTR)bg_brush);
     }
+
+    rp_lock_init(comp_lock);
 #else
     // TODO
     SDL_AddEventWatch(sdl_win_resize_evt_watcher, NULL);
@@ -752,8 +758,6 @@ static void main_windows(void) {
     for (int i = 0; i < SCREEN_COUNT; ++i) {
         ui_sdl_win_id[i] = SDL_GetWindowID(ui_sdl_win[i]);
     }
-
-    rp_lock_init(comp_lock);
 
     event_init(&update_bottom_screen_evt);
 
@@ -769,9 +773,9 @@ static void main_windows(void) {
 
     event_close(&update_bottom_screen_evt);
 
+#ifdef _WIN32
     rp_lock_close(comp_lock);
 
-#ifdef _WIN32
     DeleteObject(bg_brush);
 #endif
 

@@ -83,17 +83,17 @@ extern uint8_t **ntr_adapter_octet_list;
 extern int ntr_adapter_count;
 
 enum {
-    NTR_adapter_PRE_ANY,
-    NTR_adapter_PRE_COUNT,
+    NTR_ADAPTER_PRE_ANY,
+    NTR_ADAPTER_PRE_COUNT,
 };
 
 enum {
-    NTR_adapter_POST_AUTO,
-    NTR_adapter_POST_REFRESH,
-    NTR_adapter_POST_COUNT,
+    NTR_ADAPTER_POST_AUTO,
+    NTR_ADAPTER_POST_REFRESH,
+    NTR_ADAPTER_POST_COUNT,
 };
 
-#define NTR_adapter_EXTRA_COUNT (NTR_adapter_PRE_COUNT + NTR_adapter_POST_COUNT)
+#define NTR_ADAPTER_EXTRA_COUNT (NTR_ADAPTER_PRE_COUNT + NTR_ADAPTER_POST_COUNT)
 
 void ntr_try_auto_select_adapter(void);
 void ntr_detect_3ds_ip(void);
