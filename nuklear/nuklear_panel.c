@@ -156,8 +156,6 @@ nk_panel_begin(struct nk_context *ctx, const char *title, enum nk_panel_type pan
     layout->bounds = win->bounds;
     layout->bounds.x += panel_padding.x;
     layout->bounds.w -= 2*panel_padding.x;
-    layout->bounds.y += panel_padding.y;
-    layout->bounds.h -= 2*panel_padding.y;
     if (win->flags & NK_WINDOW_BORDER) {
         layout->border = nk_panel_get_border(style, win->flags, panel_type);
         layout->bounds = nk_shrink_rect(layout->bounds, layout->border);
@@ -321,8 +319,6 @@ nk_panel_begin(struct nk_context *ctx, const char *title, enum nk_panel_type pan
     layout->clip = layout->bounds;
     layout->clip.x -= panel_padding.x;
     layout->clip.w += 2*panel_padding.x;
-    layout->clip.y -= panel_padding.y;
-    layout->clip.h += 2*panel_padding.y;
     nk_unify(&clip, &win->buffer.clip, layout->clip.x, layout->clip.y,
         layout->clip.x + layout->clip.w, layout->clip.y + layout->clip.h);
     nk_push_scissor(out, clip);
@@ -475,7 +471,7 @@ nk_panel_end(struct nk_context *ctx)
             /* horizontal scrollbar */
             nk_flags state = 0;
             scroll.x = layout->bounds.x;
-            scroll.y = layout->bounds.y + layout->bounds.h + panel_padding.y;
+            scroll.y = layout->bounds.y + layout->bounds.h;
             scroll.w = layout->bounds.w;
             scroll.h = scrollbar_size.y;
 

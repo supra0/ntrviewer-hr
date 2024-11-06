@@ -3,7 +3,6 @@
 #include "ntr_common.h"
 
 #define HEART_BEAT_EVERY_MS 250
-#define REST_EVERY_MS 100
 
 #define TCP_MAGIC 0x12345678
 #define TCP_ARGS_COUNT 16

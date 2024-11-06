@@ -45,11 +45,17 @@ extern int ui_nk_width, ui_nk_height;
 extern float ui_nk_scale;
 
 extern int ui_win_width[SCREEN_COUNT], ui_win_height[SCREEN_COUNT];
-extern int ui_win_drawable_width[SCREEN_COUNT], ui_win_drawable_height[SCREEN_COUNT];
+extern int ui_win_width_drawable[SCREEN_COUNT], ui_win_height_drawable[SCREEN_COUNT];
 extern float ui_win_scale[SCREEN_COUNT];
+
+extern int ui_ctx_width[SCREEN_COUNT], ui_ctx_height[SCREEN_COUNT];
 
 UNUSED static bool is_renderer_sdl_renderer(void) {
     return ui_renderer >= UI_RENDERER_SDL_HW && ui_renderer <= UI_RENDERER_SDL_SW;
+}
+
+UNUSED static bool is_renderer_csc(void) {
+    return ui_renderer == UI_RENDERER_D3D11_CSC || ui_renderer == UI_RENDERER_OGL_CSC || ui_renderer == UI_RENDERER_GLES_CSC;
 }
 
 UNUSED static bool is_renderer_d3d11(void) {
@@ -78,6 +84,10 @@ UNUSED static bool is_renderer_sdl_hw(void) {
 
 int ui_common_sdl_init(void);
 void ui_common_sdl_destroy(void);
+int sdl_win_init(SDL_Window *sdl_win[SCREEN_COUNT], bool ogl);
+void sdl_win_destroy(SDL_Window *sdl_win[SCREEN_COUNT]);
+void sdl_set_wminfo(void);
+void sdl_reset_wminfo(void);
 
 extern event_t update_bottom_screen_evt;
 void ui_view_mode_update(view_mode_t view_mode);
@@ -87,5 +97,18 @@ void ui_windows_titles_update(void);
 #include "ntr_rp.h"
 struct rp_buffer_ctx_t;
 int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared);
+
+void draw_screen_get_dims(
+    int screen_top_bot, int ctx_top_bot, int win_shared, view_mode_t view_mode, int width, int height,
+    double *out_ctx_left_f,
+    double *out_ctx_top_f,
+    double *out_ctx_right_f,
+    double *out_ctx_bot_f,
+    int *out_ctx_width,
+    int *out_ctx_height,
+    int *out_win_width,
+    int *out_win_height,
+    bool *out_upscaled
+);
 
 #endif

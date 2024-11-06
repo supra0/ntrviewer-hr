@@ -3,6 +3,7 @@
 
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
+#include "ui_renderer_d3d11.h"
 #include "ntr_common.h"
 #include "nuklear_d3d11.h"
 #include "nuklear_sdl_gl3.h"
@@ -11,16 +12,17 @@
 #include "ntr_hb.h"
 #include "ntr_rp.h"
 #include "ui_main_nk.h"
-
-#include <SDL2/SDL_syswm.h>
+#include "ui_compositor_csc.h"
 
 #include <math.h>
 
 atomic_bool program_running;
+#ifdef _WIN32
+static OSVERSIONINFO osvi;
+#endif
 
 static void main_init() {
 #ifdef _WIN32
-    OSVERSIONINFO osvi = {};
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
     GetVersionEx(&osvi);
     err_log("Windows version %d.%d.%d\n", (int)osvi.dwMajorVersion, (int)osvi.dwMinorVersion, (int)osvi.dwBuildNumber);
@@ -53,11 +55,21 @@ static void parse_args(int argc, char **argv) {
 
     int j = 0;
     for (int i = 0; i < UI_RENDERER_COUNT; ++i) {
-        // Do not attempt ANGLE as a default option
-        if (i != UI_RENDERER_GLES_ANGLE) {
-            renderer_list[j] = i;
-            ++j;
+        ui_renderer = i;
+
+#ifdef _WIN32
+        if (is_renderer_csc()) {
+            if (!(osvi.dwMajorVersion >= 10 && osvi.dwBuildNumber >= 22000)) {
+                continue;
+            }
         }
+#endif
+        // Do not attempt ANGLE as a default option
+        if (is_renderer_gles_angle())
+            continue;
+
+        renderer_list[j] = i;
+        ++j;
     }
     renderer_count = j;
 
@@ -78,13 +90,30 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             return 0;
 
         case WM_SIZE: {
-            ui_win_drawable_width[i] = NK_MAX(LOWORD(lparam), 1);
-            ui_win_drawable_height[i] = NK_MAX(HIWORD(lparam), 1);
-            ui_win_width[i] = roundf(ui_win_drawable_width[i] / ui_win_scale[i]);
-            ui_win_height[i] = roundf(ui_win_drawable_height[i] / ui_win_scale[i]);
+            if (is_renderer_csc()) {
+                if (resize_top_and_ui) {
+                    rp_lock_wait(comp_lock);
+                }
+            }
+            ui_win_width_drawable[i] = NK_MAX(LOWORD(lparam), 1);
+            ui_win_height_drawable[i] = NK_MAX(HIWORD(lparam), 1);
+            ui_win_width[i] = roundf(ui_win_width_drawable[i] / ui_win_scale[i]);
+            ui_win_height[i] = roundf(ui_win_height_drawable[i] / ui_win_scale[i]);
             if (resize_top_and_ui) {
+                if (is_renderer_d3d11()) {
+                    d3d11_ui_close();
+                    if (d3d11_ui_init()) {
+                        d3d11_ui_close();
+                        ui_compositing = 0;
+                    }
+                }
                 ui_nk_width = ui_win_width[i];
                 ui_nk_height = ui_win_height[i];
+            }
+            if (is_renderer_csc()) {
+                if (resize_top_and_ui) {
+                    rp_lock_rel(comp_lock);
+                }
             }
             break;
         }
@@ -147,7 +176,7 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 }
 #endif
 
-static struct nk_color nk_window_bgcolor = { 28, 48, 62, 255 };
+struct nk_color nk_window_bgcolor = { 28, 48, 62, 255 };
 
 #ifndef _WIN32
 static int sdl_win_resize_evt_watcher(void *, SDL_Event *event) {
@@ -182,13 +211,19 @@ static void thread_loop(int i) {
     // TODO csc
     int ctx_top_bot = i;
     int screen_top_bot = i;
-    // bool win_shared = 0;
+    bool win_shared = 0;
 
     int screen_count= SCREEN_COUNT;
     view_mode_t view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
     if (view_mode != VIEW_MODE_SEPARATE) {
         screen_count = 1;
-        // TODO csc
+        if (is_renderer_csc()) {
+            win_shared = view_mode == VIEW_MODE_TOP_BOT;
+            if (win_shared) {
+                screen_count = SCREEN_COUNT;
+                ctx_top_bot = SCREEN_TOP;
+            }
+        }
     }
 
     if (i >= screen_count) {
@@ -213,12 +248,14 @@ static void thread_loop(int i) {
         if (!cond_mutex_flag_lock(&renderer_begin_evt))
             return;
 
-    if (is_renderer_sdl_renderer()) {
+    if (is_renderer_d3d11()) {
+        ui_renderer_d3d11_main(screen_top_bot, ctx_top_bot, view_mode, win_shared, bg);
+    } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_main(ctx_top_bot, view_mode, bg);
     }
 
     if (i == SCREEN_TOP) {
-        if (nk_gui_next) {
+        if (!nk_gui_next) {
             if (nk_input_current) {
                 nk_input_end(ui_nk_ctx);
                 nk_input_current = 0;
@@ -228,7 +265,7 @@ static void thread_loop(int i) {
             }
 
             ui_main_nk();
-            nk_gui_next = 0;
+            nk_gui_next = 1;
         }
 
         if (
@@ -250,13 +287,18 @@ static void thread_loop(int i) {
 
             /* this hack makes the font appear to be scaled down to the desired
              * size and is only necessary when font_scale > 1 */
-            font->handle.height = font->handle.height / ui_font_scale;
-            /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
-            nk_style_set_font(ui_nk_ctx, &font->handle);
+
+            if (font) {
+                font->handle.height = font->handle.height / ui_font_scale;
+                // nk_style_load_all_cursors(ui_nk_ctx, atlas->cursors);
+                nk_style_set_font(ui_nk_ctx, &font->handle);
+            }
         }
     }
 
-    if (is_renderer_sdl_renderer()) {
+    if (is_renderer_d3d11()) {
+        ui_renderer_d3d11_present(screen_top_bot, ctx_top_bot, win_shared);
+    } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_present(ctx_top_bot);
     }
 
@@ -378,6 +420,7 @@ skip_evt:
     if (ui_view_mode_prev != view_mode) {
         ui_view_mode_update(view_mode);
         ui_view_mode_prev = view_mode;
+        SDL_RaiseWindow(ui_sdl_win[SCREEN_TOP]);
     }
 
     if (ui_fullscreen_prev != ui_fullscreen) {
@@ -513,16 +556,6 @@ static void main_windows(void) {
     nk_input_current = 0;
 
 #ifdef _WIN32
-    for (int i = 0; i < SCREEN_COUNT; ++i) {
-        SDL_SysWMinfo wmInfo;
-
-        SDL_VERSION(&wmInfo.version);
-        SDL_GetWindowWMInfo(ui_sdl_win[i], &wmInfo);
-
-        ui_hwnd[i] = wmInfo.info.win.window;
-        ui_hdc[i] = wmInfo.info.win.hdc;
-    }
-
     HBRUSH bg_brush = CreateSolidBrush(
         RGB(nk_window_bgcolor.r, nk_window_bgcolor.g, nk_window_bgcolor.b));
     for (int i = 0; i < SCREEN_COUNT; ++i) {
@@ -540,6 +573,8 @@ static void main_windows(void) {
         ui_sdl_win_id[i] = SDL_GetWindowID(ui_sdl_win[i]);
     }
 
+    rp_lock_init(comp_lock);
+
     event_init(&update_bottom_screen_evt);
 
     SDL_ShowWindow(ui_sdl_win[SCREEN_TOP]);
@@ -554,12 +589,10 @@ static void main_windows(void) {
 
     event_close(&update_bottom_screen_evt);
 
+    rp_lock_close(comp_lock);
+
 #ifdef _WIN32
     DeleteObject(bg_brush);
-    for (int i = 0; i < SCREEN_COUNT; ++i) {
-        ui_hdc[i] = NULL;
-        ui_hwnd[i] = NULL;
-    }
 #endif
 
     rp_lock_close(nk_input_lock);
@@ -582,6 +615,15 @@ int main(int argc, char **argv) {
             default:
                 break;
 
+            case UI_RENDERER_D3D11_CSC:
+            case UI_RENDERER_D3D11:
+                if (ui_renderer_d3d11_init()) {
+                    ui_renderer_d3d11_destroy();
+                    break;
+                }
+                done = 1;
+                break;
+
             case UI_RENDERER_SDL_HW:
             case UI_RENDERER_SDL_SW:
                 if (ui_renderer_sdl_init()) {
@@ -599,6 +641,11 @@ int main(int argc, char **argv) {
 
     switch (ui_renderer) {
         default:
+            break;
+
+        case UI_RENDERER_D3D11_CSC:
+        case UI_RENDERER_D3D11:
+            ui_renderer_d3d11_destroy();
             break;
 
         case UI_RENDERER_SDL_HW:

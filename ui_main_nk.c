@@ -13,15 +13,20 @@ enum nk_nav_t nk_nav_cmd;
 static struct nk_style nk_style_current;
 
 #include "nuklear_sdl_renderer.h"
+#include "nuklear_d3d11.h"
 
 void nk_font_stash_begin(struct nk_font_atlas **atlas) {
-    if (is_renderer_sdl_renderer()) {
+    if (is_renderer_d3d11()) {
+        nk_d3d11_font_stash_begin(atlas);
+    } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_begin(atlas);
     }
 }
 
 void nk_font_stash_end(void) {
-    if (is_renderer_sdl_renderer()) {
+    if (is_renderer_d3d11()) {
+        nk_d3d11_font_stash_end();
+    } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_end();
     }
 }
@@ -35,16 +40,14 @@ void nk_backend_font_init(void)
 
         nk_font_stash_begin(&atlas);
         nk_font_stash_end();
-        // TODO
 
-        /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
-        /*nk_style_set_font(ctx, &roboto->handle)*/;
+        // nk_style_load_all_cursors(ui_nk_ctx, atlas->cursors);
+        // nk_style_set_font(ui_nk_ctx, &roboto->handle);
     }
 
-    /* style.c */
-    // set_style(ctx, THEME_WHITE);
-    // set_style(ctx, THEME_RED);
-    // set_style(ctx, THEME_BLUE);
+    // set_style(ui_nk_ctx, THEME_WHITE);
+    // set_style(ui_nk_ctx, THEME_RED);
+    // set_style(ui_nk_ctx, THEME_BLUE);
     set_style(ui_nk_ctx, THEME_DARK);
     nk_style_current = ui_nk_ctx->style;
 }
@@ -579,7 +582,7 @@ void ui_main_nk(void)
         check_nav_property_prev(ctx, nk_property_name, NK_FOCUS_VIEWER_PORT);
 
         nk_layout_row_dynamic(ctx, 30, 1);
-        nk_label(ctx, "Press \"F\" to toggle ui_fullscreen.", NK_TEXT_CENTERED);
+        nk_label(ctx, "Press \"F\" to toggle fullscreen.", NK_TEXT_CENTERED);
 
         nk_layout_row_dynamic(ctx, 30, 2);
         nk_label(ctx, "Prioritize Top Screen", NK_TEXT_CENTERED);

@@ -11,5 +11,5 @@
     ],
     "clangd.fallbackFlags": [
         "-I${workspaceFolder}/include"
-    ]
+    ],
 }

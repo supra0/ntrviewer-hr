@@ -12,29 +12,6 @@ static SDL_Window *sdl_win[SCREEN_COUNT];
 static SDL_Texture *sdl_texture[SCREEN_COUNT][SCREEN_COUNT];
 static struct nk_context *nk_ctx;
 
-static int sdl_win_init(void) {
-    for (int i = 0; i < SCREEN_COUNT; ++i) {
-        sdl_win[i] = SDL_CreateWindow(WIN_TITLE,
-            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            WIN_WIDTH_DEFAULT, WIN_HEIGHT_DEFAULT, SDL_WIN_FLAGS_DEFAULT);
-        if (!sdl_win[i]) {
-            err_log("SDL_CreateWindow: %s\n", SDL_GetError());
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-static void sdl_win_destroy(void) {
-    for (int i = 0; i < SCREEN_COUNT; ++i) {
-        if (sdl_win[i]) {
-            SDL_DestroyWindow(sdl_win[i]);
-            sdl_win[i] = NULL;
-        }
-    }
-}
-
 static int sdl_texture_init(void) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
     for (int j = 0; j < SCREEN_COUNT; ++j) {
@@ -183,12 +160,14 @@ static void sdl_renderer_destroy(void) {
 }
 
 int ui_renderer_sdl_init(void) {
-    if (sdl_win_init()) {
+    if (sdl_win_init(sdl_win, 0)) {
         return -1;
     }
 
     for (int i = 0; i < SCREEN_COUNT; ++i)
         ui_sdl_win[i] = sdl_win[i];
+
+    sdl_set_wminfo();
 
     if (sdl_renderer_init()) {
         return -1;
@@ -204,10 +183,12 @@ void ui_renderer_sdl_destroy(void) {
 
     sdl_renderer_destroy();
 
+    sdl_reset_wminfo();
+
     for (int i = 0; i < SCREEN_COUNT; ++i)
         ui_sdl_win[i] = NULL;
 
-    sdl_win_destroy();
+    sdl_win_destroy(sdl_win);
 }
 
 #include "ntr_rp.h"
@@ -291,9 +272,10 @@ void ui_renderer_sdl_draw(uint8_t *data, int width, int height, int screen_top_b
 void ui_renderer_sdl_present(int ctx_top_bot) {
     int i = ctx_top_bot;
     if (i == SCREEN_TOP) {
-        if (!nk_input_current && !nk_gui_next)
-        nk_sdl_renderer_render(NK_ANTI_ALIASING_ON);
-        nk_gui_next = 1;
+        if (nk_gui_next) {
+            nk_sdl_renderer_render(NK_ANTI_ALIASING_ON);
+            nk_gui_next = 0;
+        }
     }
     SDL_RenderPresent(sdl_renderer[i]);
 }

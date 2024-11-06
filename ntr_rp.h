@@ -27,7 +27,16 @@ extern atomic_bool kcp_restart;
 #define sr_destroy(...) ((void)0)
 #define sr_reset() ((void)0)
 
+#ifdef _WIN32
+#include <d3d11.h>
+#endif
+
 struct rp_buffer_ctx_t {
+#ifdef _WIN32
+    ID3D11Texture2D *d3d_tex[SCREEN_COUNT];
+    ID3D11ShaderResourceView *d3d_srv[SCREEN_COUNT];
+#endif
+
     uint8_t screen_decoded[FBI_COUNT][SCREEN_HEIGHT0 * SCREEN_WIDTH * GL_CHANNELS_N];
     uint8_t screen_upscaled[SCREEN_HEIGHT0 * SCREEN_WIDTH * GL_CHANNELS_N * SCREEN_UPSCALE_FACTOR * SCREEN_UPSCALE_FACTOR];
 
@@ -38,9 +47,10 @@ struct rp_buffer_ctx_t {
     int index_ready_display_2;
     int index_ready_display;
     int index_decode;
-    uint8_t *prev_data;
-    int prev_win_width, prev_win_height;
-    view_mode_t prev_view_mode;
+
+    uint8_t *data_prev;
+    int win_width_prev, win_height_prev;
+    view_mode_t view_mode_prev;
 
     event_t decode_updated_event;
 };

@@ -21,6 +21,9 @@ extern bool renderer_evt_sync;
 extern bool nk_gui_next;
 extern bool nk_input_current;
 
+#include "nuklear/nuklear.h"
+extern struct nk_color nk_window_bgcolor;
+
 void itimeofday(int64_t *sec, int64_t *usec);
 
 UNUSED static inline int64_t iclock64(void)

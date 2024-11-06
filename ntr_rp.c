@@ -504,8 +504,7 @@ static thread_ret_t jpeg_decode_thread_func(void *e)
         uint8_t *out = ctx->screen_decoded[index];
 
         view_mode_t view_mode = __atomic_load_n(&ui_view_mode, __ATOMIC_RELAXED);
-        struct rp_buffer_ctx_t *sync_ctx = view_mode == VIEW_MODE_TOP_BOT ? &rp_buffer_ctx[SCREEN_TOP] : NULL;
-        // TODO csc
+        struct rp_buffer_ctx_t *sync_ctx = view_mode == VIEW_MODE_TOP_BOT && !is_renderer_csc() ? &rp_buffer_ctx[SCREEN_TOP] : NULL;
 
         int ret;
         if (ptr->is_kcp)
@@ -530,7 +529,7 @@ static thread_ret_t jpeg_decode_thread_func(void *e)
         {
             if (ptr->in)
             {
-                if (handle_decode(out, ptr->in, ptr->in_size, top_bot == 0 ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1, SCREEN_WIDTH) != 0)
+                if (handle_decode(out, ptr->in, ptr->in_size, top_bot == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1, SCREEN_WIDTH) != 0)
                 {
                     err_log("recv decode error\n");
                     __atomic_add_fetch(&frame_lost_tracker, 1, __ATOMIC_RELAXED);
@@ -752,7 +751,7 @@ static int handle_recv_kcp(uint8_t *buf, int size)
 
             info->jpeg_quality = jpeg_quality;
             info->core_count = core_count;
-            info->is_top = top_bot == 0;
+            info->is_top = top_bot == SCREEN_TOP;
             info->chroma_ss = chroma_ss;
 
             for (int t = 0; t < core_count; ++t) {

@@ -2,6 +2,7 @@
 
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
+#include "ui_renderer_d3d11.h"
 #include "main.h"
 #include "ikcp.h"
 
@@ -22,8 +23,10 @@ int ui_nk_width, ui_nk_height;
 float ui_nk_scale;
 
 int ui_win_width[SCREEN_COUNT], ui_win_height[SCREEN_COUNT];
-int ui_win_drawable_width[SCREEN_COUNT], ui_win_drawable_height[SCREEN_COUNT];
+int ui_win_width_drawable[SCREEN_COUNT], ui_win_height_drawable[SCREEN_COUNT];
 float ui_win_scale[SCREEN_COUNT];
+
+int ui_ctx_width[SCREEN_COUNT], ui_ctx_height[SCREEN_COUNT];
 
 event_t update_bottom_screen_evt;
 
@@ -114,20 +117,23 @@ void ui_window_size_update(int window_top_bot) {
     SDL_GetWindowSize(ui_sdl_win[i], &ui_win_width[i], &ui_win_height[i]);
 
     if (is_renderer_sdl_renderer()) {
-        SDL_GetRendererOutputSize(sdl_renderer[i], &ui_win_drawable_width[i], &ui_win_drawable_height[i]);
+        SDL_GetRendererOutputSize(sdl_renderer[i], &ui_win_width_drawable[i], &ui_win_height_drawable[i]);
     } else if (is_renderer_sdl_ogl()) {
-        SDL_GL_GetDrawableSize(ui_sdl_win[i], &ui_win_drawable_width[i], &ui_win_drawable_height[i]);
+        SDL_GL_GetDrawableSize(ui_sdl_win[i], &ui_win_width_drawable[i], &ui_win_height_drawable[i]);
     } else if (is_renderer_d3d11()) {
 #ifdef _WIN32
         RECT rect = {};
         GetClientRect(ui_hwnd[i], &rect);
-        ui_win_drawable_width[i] = rect.right;
-        ui_win_drawable_height[i] = rect.bottom;
+        ui_win_width_drawable[i] = rect.right;
+        ui_win_height_drawable[i] = rect.bottom;
 #endif
     }
 
-    float scale_x = (float)(ui_win_drawable_width[i]) / (float)(ui_win_width[i]);
-    float scale_y = (float)(ui_win_drawable_height[i]) / (float)(ui_win_height[i]);
+    ui_win_width_drawable[i] = NK_MAX(ui_win_width_drawable[i], 1);
+    ui_win_height_drawable[i] = NK_MAX(ui_win_height_drawable[i], 1);
+
+    float scale_x = (float)(ui_win_width_drawable[i]) / (float)(ui_win_width[i]);
+    float scale_y = (float)(ui_win_height_drawable[i]) / (float)(ui_win_height[i]);
     scale_x = roundf(scale_x * ui_font_scale_step_factor) / ui_font_scale_step_factor;
     scale_y = roundf(scale_y * ui_font_scale_step_factor) / ui_font_scale_step_factor;
     ui_win_scale[i] = (scale_x + scale_y) * 0.5;
@@ -274,12 +280,11 @@ void ui_windows_titles_update(void)
 }
 
 static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, int index, view_mode_t view_mode, bool win_shared) {
-    if (is_renderer_sdl_renderer()) {
+    if (is_renderer_d3d11()) {
+        ui_renderer_d3d11_draw(ctx, data, width, height, screen_top_bot, ctx_top_bot, index, view_mode, win_shared);
+    } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_draw(data, width, height, screen_top_bot, ctx_top_bot, view_mode);
     }
-    (void)ctx;
-    (void)index;
-    (void)win_shared;
     // TODO
 }
 
@@ -308,7 +313,7 @@ int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_t
         return 0;
 
     uint8_t *data = ctx->screen_decoded[index_display];
-    ctx->prev_data = data;
+    ctx->data_prev = data;
     if (status >= FBS_UPDATED)
     {
         __atomic_add_fetch(&frame_rate_displayed_tracker[screen_top_bot], 1, __ATOMIC_RELAXED);
@@ -320,4 +325,149 @@ int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_t
         draw_screen_dispatch(ctx, NULL, width, height, screen_top_bot, ctx_top_bot, index_display, view_mode, win_shared);
         return -1;
     }
+}
+
+int sdl_win_init(SDL_Window *sdl_win[SCREEN_COUNT], bool ogl) {
+    for (int i = 0; i < SCREEN_COUNT; ++i) {
+        sdl_win[i] = SDL_CreateWindow(WIN_TITLE,
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            WIN_WIDTH_DEFAULT, WIN_HEIGHT_DEFAULT, SDL_WIN_FLAGS_DEFAULT | (ogl ? SDL_WINDOW_OPENGL : 0));
+        if (!sdl_win[i]) {
+            err_log("SDL_CreateWindow: %s\n", SDL_GetError());
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+void sdl_win_destroy(SDL_Window *sdl_win[SCREEN_COUNT]) {
+    for (int i = 0; i < SCREEN_COUNT; ++i) {
+        if (sdl_win[i]) {
+            SDL_DestroyWindow(sdl_win[i]);
+            sdl_win[i] = NULL;
+        }
+    }
+}
+
+#include <SDL2/SDL_syswm.h>
+
+void sdl_set_wminfo(void) {
+#ifdef _WIN32
+    for (int i = 0; i < SCREEN_COUNT; ++i) {
+        SDL_SysWMinfo wmInfo;
+
+        SDL_VERSION(&wmInfo.version);
+        SDL_GetWindowWMInfo(ui_sdl_win[i], &wmInfo);
+
+        ui_hwnd[i] = wmInfo.info.win.window;
+        ui_hdc[i] = wmInfo.info.win.hdc;
+    }
+#endif
+}
+
+void sdl_reset_wminfo(void) {
+#ifdef _WIN32
+    for (int i = 0; i < SCREEN_COUNT; ++i) {
+        ui_hdc[i] = NULL;
+        ui_hwnd[i] = NULL;
+    }
+#endif
+}
+
+void draw_screen_get_dims(
+    int screen_top_bot, int ctx_top_bot, int win_shared, view_mode_t view_mode, int width, int height,
+    double *out_ctx_left_f,
+    double *out_ctx_top_f,
+    double *out_ctx_right_f,
+    double *out_ctx_bot_f,
+    int *out_ctx_width,
+    int *out_ctx_height,
+    int *out_win_width_drawable,
+    int *out_win_height_drawable,
+    bool *out_upscaled
+) {
+    double ctx_left_f;
+    double ctx_top_f;
+    double ctx_right_f;
+    double ctx_bot_f;
+    int ctx_width;
+    int ctx_height;
+    int win_width_drawable;
+    int win_height_drawable;
+
+    int i = ctx_top_bot;
+
+    if (win_shared) {
+        win_width_drawable = ctx_width = ui_ctx_width[i];
+        win_height_drawable = ctx_height = ui_ctx_height[i];
+        ctx_left_f = -1.0f;
+        ctx_top_f = 1.0f;
+        ctx_right_f = 1.0f;
+        ctx_bot_f = -1.0f;
+    } else {
+        if (view_mode == VIEW_MODE_TOP_BOT) {
+            win_width_drawable = ui_win_width_drawable[i];
+            win_height_drawable = ui_win_height_drawable[i];
+
+            ctx_height = (double)ui_win_height_drawable[i] / 2;
+            int ctx_left;
+            int ctx_top;
+            if ((double)ui_win_width_drawable[i] / width * height > ctx_height) {
+                ctx_width = (double)ctx_height / height * width;
+                ctx_left = (double)(ui_win_width_drawable[i] - ctx_width) / 2;
+                ctx_top = 0;
+            } else {
+                ctx_height = (double)ui_win_width_drawable[i] / width * height;
+                ctx_left = 0;
+                ctx_width = ui_win_width_drawable[i];
+                ctx_top = (double)ui_win_height_drawable[i] / 2 - ctx_height;
+            }
+
+            if (screen_top_bot == SCREEN_TOP) {
+                ctx_left_f = (double)ctx_left / ui_win_width_drawable[i] * 2 - 1;
+                ctx_top_f = 1 - (double)ctx_top / ui_win_height_drawable[i] * 2;
+                ctx_right_f = -ctx_left_f;
+                ctx_bot_f = 0;
+            } else {
+                ctx_left_f = (double)ctx_left / ui_win_width_drawable[i] * 2 - 1;
+                ctx_top_f = 0;
+                ctx_right_f = -ctx_left_f;
+                ctx_bot_f = -1 + (double)ctx_top / ui_win_height_drawable[i] * 2;
+            }
+        } else {
+            win_width_drawable = ui_win_width_drawable[i];
+            win_height_drawable = ui_win_height_drawable[i];
+
+            ctx_height = (double)ui_win_height_drawable[i];
+            int ctx_left;
+            int ctx_top;
+            if ((double)ui_win_width_drawable[i] / width * height > ctx_height) {
+                ctx_width = (double)ctx_height / height * width;
+                ctx_left = (double)(ui_win_width_drawable[i] - ctx_width) / 2;
+                ctx_top = 0;
+            } else {
+                ctx_height = (double)ui_win_width_drawable[i] / width * height;
+                ctx_left = 0;
+                ctx_width = ui_win_width_drawable[i];
+                ctx_top = ((double)ui_win_height_drawable[i] - ctx_height) / 2;
+            }
+
+            ctx_left_f = (double)ctx_left / ui_win_width_drawable[i] * 2 - 1;
+            ctx_top_f = 1 - (double)ctx_top / ui_win_height_drawable[i] * 2;
+            ctx_right_f = -ctx_left_f;
+            ctx_bot_f = -ctx_top_f;
+        }
+    }
+
+    *out_ctx_left_f = ctx_left_f;
+    *out_ctx_top_f = ctx_top_f;
+    *out_ctx_right_f = ctx_right_f;
+    *out_ctx_bot_f = ctx_bot_f;
+    *out_ctx_width = ctx_width;
+    *out_ctx_height = ctx_height;
+    *out_win_width_drawable = win_width_drawable;
+    *out_win_height_drawable = win_height_drawable;
+    // TODO
+    *out_upscaled = 0;
 }

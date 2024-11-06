@@ -12,6 +12,7 @@
 #define socket_valid(s) ((s) != INVALID_SOCKET)
 #define socket_errno() WSAGetLastError()
 
+#include <d3dcompiler.h>
 #include "windows.h"
 typedef HANDLE event_t;
 
@@ -130,6 +131,8 @@ typedef void *thread_ret_t;
 #define thread_set_cancel_state(b) pthread_setcancelstate(b ? PTHREAD_CANCEL_ENABLE : PTHREAD_CANCEL_DISABLE, NULL)
 #endif
 
+#define REST_EVERY_MS 100
+
 enum screen_t {
     SCREEN_TOP,
     SCREEN_BOT,
@@ -173,6 +176,7 @@ enum frame_buffer_status_t
 #define GL_CHANNELS_N 4
 #define TJ_FORMAT TJPF_RGBA
 #define SDL_FORMAT SDL_PIXELFORMAT_RGBA32
+#define D3D_FORMAT DXGI_FORMAT_R8G8B8A8_UNORM
 
 #define ui_font_scale_step_factor (32.0f)
 #define ui_font_scale_epsilon (1.0f / ui_font_scale_step_factor)
@@ -187,5 +191,7 @@ typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
+
+#include "glad/glad.h"
 
 #endif
