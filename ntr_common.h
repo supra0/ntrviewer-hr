@@ -7,6 +7,7 @@
 #include "nuklear/nuklear.h"
 
 #include "main.h"
+#include "ntr_rp.h"
 #include <stdatomic.h>
 
 int socket_startup(void);
@@ -34,7 +35,7 @@ UNUSED static bool socket_set_nonblock(SOCKET s, bool nb)
 
 UNUSED static bool socket_poll(SOCKET s)
 {
-    while (program_running) {
+    while (program_running && !kcp_restart) {
         WSAPOLLFD pollfd = {
             .fd = s,
             .events = POLLIN,

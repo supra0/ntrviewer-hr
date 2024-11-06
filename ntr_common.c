@@ -214,6 +214,9 @@ void ntr_try_auto_select_adapter(void) {
             ntr_selected_adapter = i;
         }
     }
+
+    ntr_rp_port_changed = 1;
+    kcp_restart = 1;
 }
 
 #ifdef _WIN32

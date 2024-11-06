@@ -565,13 +565,16 @@ void ui_main_nk(void)
         {
             set_nav_combobox_prev(NK_FOCUS_VIEWER_IP);
             ntr_selected_adapter = selected;
-            if (ntr_selected_adapter == ntr_adapter_count - 2)
+            if (ntr_selected_adapter == ntr_adapter_count - NTR_adapter_POST_COUNT + NTR_adapter_POST_AUTO)
             {
                 ntr_try_auto_select_adapter();
             }
-            else if (ntr_selected_adapter == ntr_adapter_count - 1)
+            else if (ntr_selected_adapter == ntr_adapter_count - NTR_adapter_POST_COUNT + NTR_adapter_POST_REFRESH)
             {
                 ntr_get_adapter_list();
+            } else {
+                ntr_rp_port_changed = 1;
+                kcp_restart = 1;
             }
         }
 
@@ -580,6 +583,12 @@ void ui_main_nk(void)
         do_nav_property_next(ctx, nk_property_name, NK_FOCUS_VIEWER_PORT, ntr_rp_port);
         nk_property_int(ctx, nk_property_name, 1024, &ntr_rp_port, 65535, 1, 1);
         check_nav_property_prev(ctx, nk_property_name, NK_FOCUS_VIEWER_PORT);
+        if (ntr_rp_port_bound != ntr_rp_port)
+        {
+            ntr_rp_port_bound = ntr_rp_port;
+            ntr_rp_port_changed = 1;
+            kcp_restart = 1;
+        }
 
         nk_layout_row_dynamic(ctx, 30, 1);
         nk_label(ctx, "Press \"F\" to toggle fullscreen.", NK_TEXT_CENTERED);
@@ -640,15 +649,10 @@ void ui_main_nk(void)
         if (nk_button_label(ctx, "Connect") || button_ret)
         {
             set_nav_button_prev(NK_FOCUS_CONNECT);
+            menu_remote_play = 1;
             if (menu_work_state == CONNECTION_STATE_DISCONNECTED)
             {
                 menu_work_state = CONNECTION_STATE_CONNECTING;
-            }
-            menu_remote_play = 1;
-            if (ntr_rp_port != ntr_rp_port_bound)
-            {
-                ntr_rp_port_bound = ntr_rp_port;
-                ntr_rp_port_changed = 1;
             }
             kcp_restart = 1;
         }
