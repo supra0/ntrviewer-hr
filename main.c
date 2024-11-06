@@ -37,6 +37,7 @@ static void main_destroy() {
 }
 
 static enum ui_renderer_t renderer_list[UI_RENDERER_COUNT];
+static const char *renderer_name_list[UI_RENDERER_COUNT];
 static int renderer_count;
 static event_t renderer_begin_evt;
 static event_t renderer_end_evt;
@@ -49,21 +50,166 @@ bool nk_input_current;
 bool renderer_single_thread;
 bool renderer_evt_sync;
 
-static void parse_args(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+#include <getopt.h>
+
+static int opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, opt_flag_sdl_hw, opt_flag_sdl_sw;
+
+#define opt_name_d3d "d3d"
+#define opt_name_ogl "ogl"
+#define opt_name_gles "gles"
+#define opt_name_angle "angle"
+#define opt_name_sdl_hw "sdl-hw"
+#define opt_name_sdl_sw "sdl-sw"
+#define opt_name_no_csc "no-csc"
+
+#define mod_name_csc "csc"
+
+static struct option long_options[] = {
+    {opt_name_d3d, no_argument, &opt_flag_d3d, 1},
+    {opt_name_ogl, no_argument, &opt_flag_ogl, 1},
+    {opt_name_gles, no_argument, &opt_flag_gles, 1},
+    {opt_name_angle, no_argument, &opt_flag_angle, 1},
+    {opt_name_sdl_hw, no_argument, &opt_flag_sdl_hw, 1},
+    {opt_name_sdl_sw, no_argument, &opt_flag_sdl_sw, 1},
+    {opt_name_no_csc, no_argument, &opt_flag_no_csc, 1},
+    {0, 0, 0, 0}};
+
+static void add_arg(enum ui_renderer_t arg, const char *name) {
+    for (int i = 0; i < renderer_count; ++i) {
+        if (renderer_list[i] == arg) {
+            return;
+        }
+    }
+
+    if (renderer_count < UI_RENDERER_COUNT) {
+        renderer_list[renderer_count] = arg;
+        renderer_name_list[renderer_count] = name;
+        ++renderer_count;
+    }
+}
+
+static void remove_csc_args(void) {
+    for (int i = 0; i < renderer_count;) {
+        ui_renderer = renderer_list[i];
+        if (is_renderer_csc()) {
+            for (int j = i + 1; j < renderer_count; ++j) {
+                renderer_list[j - 1] = renderer_list[j];
+                renderer_name_list[j - 1] = renderer_name_list[j];
+            }
+            --renderer_count;
+        } else {
+            ++i;
+        }
+    }
+}
+
+static void remove_non_angle_ogl_args(void) {
+    for (int i = 0; i < renderer_count;) {
+        ui_renderer = renderer_list[i];
+        if (is_renderer_sdl_ogl() && !is_renderer_gles_angle()) {
+            for (int j = i + 1; j < renderer_count; ++j) {
+                renderer_list[j - 1] = renderer_list[j];
+                renderer_name_list[j - 1] = renderer_name_list[j];
+            }
+            --renderer_count;
+        } else {
+            ++i;
+        }
+    }
+}
+
+static bool check_osvi_csc(void) {
+#ifdef _WIN32
+    return osvi.dwMajorVersion >= 10 && osvi.dwBuildNumber >= 22000;
+#else
+    return 0;
+#endif
+}
+
+static void parse_args(int argc, char **argv)
+{
+    opt_flag_no_csc = !check_osvi_csc();
+
+    while (1) {
+        int option_index = 0;
+        int c = getopt_long(argc, argv, "+", long_options, &option_index);
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+            default:
+                break;
+
+            case 0: {
+                if (long_options[option_index].flag) {
+                    const char *const name = long_options[option_index].name;
+                    if (strcmp(name, opt_name_d3d) == 0) {
+                        if (!opt_flag_no_csc) {
+                            add_arg(UI_RENDERER_D3D11_CSC, opt_name_d3d " " mod_name_csc);
+                        }
+                        add_arg(UI_RENDERER_D3D11, opt_name_d3d);
+                    } else if (strcmp(name, opt_name_ogl) == 0) {
+                        if (!opt_flag_angle) {
+                            if (!opt_flag_no_csc) {
+                                add_arg(UI_RENDERER_OGL_CSC, opt_name_ogl " " mod_name_csc);
+                            }
+                            add_arg(UI_RENDERER_OGL, opt_name_ogl);
+                        }
+                    } else if (strcmp(name, opt_name_gles) == 0) {
+                        if (!opt_flag_angle) {
+                            if (!opt_flag_no_csc) {
+                                add_arg(UI_RENDERER_GLES_CSC, opt_name_gles " " mod_name_csc);
+                            }
+                            add_arg(UI_RENDERER_GLES, opt_name_gles);
+                        }
+                    } else if (strcmp(name, opt_name_angle) == 0) {
+                        add_arg(UI_RENDERER_GLES_ANGLE, opt_name_angle);
+                        remove_non_angle_ogl_args();
+                    } else if (strcmp(name, opt_name_sdl_hw) == 0) {
+                        add_arg(UI_RENDERER_SDL_HW, opt_name_sdl_hw);
+                    } else if (strcmp(name, opt_name_sdl_sw) == 0) {
+                        add_arg(UI_RENDERER_SDL_SW, opt_name_sdl_sw);
+                    } else if (strcmp(name, opt_name_no_csc) == 0) {
+                        remove_csc_args();
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    if (renderer_count) {
+        printf("using drivers:\n");
+        bool ui_renderer_set = 0;
+        for (int i = 0; i < renderer_count; ++i) {
+            printf("%s\n", renderer_name_list[i]);
+
+            if (!ui_renderer_set) {
+                ui_renderer = renderer_list[i];
+                ui_renderer_set = 1;
+            }
+
+            if (is_renderer_sdl_renderer()) {
+                enum ui_renderer_t renderer = ui_renderer;
+                ui_renderer = renderer_list[i];
+                if (is_renderer_sdl_renderer()) {
+                    ui_renderer = renderer;
+                }
+            }
+        }
+        return;
+    }
 
     int j = 0;
     for (int i = 0; i < UI_RENDERER_COUNT; ++i) {
         ui_renderer = i;
 
-#ifdef _WIN32
         if (is_renderer_csc()) {
-            if (!(osvi.dwMajorVersion >= 10 && osvi.dwBuildNumber >= 22000)) {
+            if (!check_osvi_csc()) {
                 continue;
             }
         }
-#endif
         // Do not attempt ANGLE as a default option
         if (is_renderer_gles_angle())
             continue;
@@ -608,51 +754,34 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    bool renderer_inited = 0;
     for (int i = 0; i < renderer_count; ++i) {
         ui_renderer = renderer_list[i];
-        bool done = 0;
-        switch (ui_renderer) {
-            default:
-                break;
-
-            case UI_RENDERER_D3D11_CSC:
-            case UI_RENDERER_D3D11:
-                if (ui_renderer_d3d11_init()) {
-                    ui_renderer_d3d11_destroy();
-                    break;
-                }
-                done = 1;
-                break;
-
-            case UI_RENDERER_SDL_HW:
-            case UI_RENDERER_SDL_SW:
-                if (ui_renderer_sdl_init()) {
-                    ui_renderer_sdl_destroy();
-                    break;
-                }
-                done = 1;
-                break;
+        if (is_renderer_d3d11()) {
+            if (ui_renderer_d3d11_init())
+                ui_renderer_d3d11_destroy();
+            else
+                renderer_inited = 1;
+        } else if (is_renderer_sdl_renderer()) {
+            if (ui_renderer_sdl_init())
+                ui_renderer_sdl_destroy();
+            else
+                renderer_inited = 1;
         }
-        if (done)
+        if (renderer_inited)
             break;
+    }
+    if (!renderer_inited) {
+        err_log("failed to initializer driver(s)\n");
+        return -1;
     }
 
     main_windows();
 
-    switch (ui_renderer) {
-        default:
-            break;
-
-        case UI_RENDERER_D3D11_CSC:
-        case UI_RENDERER_D3D11:
-            ui_renderer_d3d11_destroy();
-            break;
-
-        case UI_RENDERER_SDL_HW:
-        case UI_RENDERER_SDL_SW:
-            ui_renderer_sdl_destroy();
-            break;
-    }
+    if (is_renderer_d3d11())
+        ui_renderer_d3d11_destroy();
+    else if (is_renderer_sdl_renderer())
+        ui_renderer_sdl_destroy();
 
     ui_common_sdl_destroy();
 
