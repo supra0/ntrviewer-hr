@@ -36,45 +36,6 @@ typedef struct VkWin32KeyedMutexAcquireReleaseInfoKHR {
 
 static const VkStructureType VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR = (VkStructureType)1000075000;
 
-class FeatureCache
-{
-public:
-    void clear()
-    {
-        gpu_cache.clear();
-        cpu_cache.clear();
-    }
-
-    std::string make_key(int yi, int xi, int ti, const std::string& name) const
-    {
-        return std::to_string(yi) + "-" + std::to_string(xi) + "-" + std::to_string(ti) + "-" + name;
-    }
-
-    void load(int yi, int xi, int ti, const std::string& name, ncnn::VkMat& feat)
-    {
-        feat = gpu_cache[make_key(yi, xi, ti, name)];
-    }
-
-    void save(int yi, int xi, int ti, const std::string& name, ncnn::VkMat& feat)
-    {
-        gpu_cache[make_key(yi, xi, ti, name)] = feat;
-    }
-
-    void load(int yi, int xi, int ti, const std::string& name, ncnn::Mat& feat)
-    {
-        feat = cpu_cache[make_key(yi, xi, ti, name)];
-    }
-
-    void save(int yi, int xi, int ti, const std::string& name, ncnn::Mat& feat)
-    {
-        cpu_cache[make_key(yi, xi, ti, name)] = feat;
-    }
-
-public:
-    std::map<std::string, ncnn::VkMat> gpu_cache;
-    std::map<std::string, ncnn::Mat> cpu_cache;
-};
-
 #ifdef _WIN32
 RealCUGAN::RealCUGAN(int gpuid, ID3D11Device **dev, ID3D11DeviceContext **ctx, bool _tta_mode, int num_threads) : dev(dev), ctx(ctx), d3d11(true) {
     init(gpuid, tta_mode, num_threads);

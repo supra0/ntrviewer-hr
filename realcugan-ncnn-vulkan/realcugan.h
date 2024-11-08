@@ -16,8 +16,6 @@
 #endif
 #include "glad/glad.h"
 
-class FeatureCache;
-
 class RealCUGAN;
 
 class OutVkImageMat : public ncnn::VkImageMat {

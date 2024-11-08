@@ -7,7 +7,7 @@ CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
 ifeq ($(OS),Windows_NT)
-	LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi
+	LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi
 	TARGET := ntrviewer.exe
 	NASM := -DWIN64 -fwin64
 else
@@ -18,7 +18,11 @@ endif
 
 GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o
 ifeq ($(OS),Windows_NT)
-GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o
+MAGP_SRC := $(wildcard magpie/*.cpp)
+MAGP_OBJ := $(MAGP_SRC:.cpp=.o)
+MUPR_SRC := $(wildcard muparser/*.cpp)
+MUPR_OBJ := $(MUPR_SRC:.cpp=.o)
+GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o $(MAGP_OBJ) $(MUPR_OBJ)
 endif
 LDLIBS += -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools
 
@@ -91,6 +95,12 @@ jpeg_turbo/jpeg16/%.o: jpeg_turbo/jpeg16/%.c
 %.o: %.cpp
 	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
 
+muparser/%.o: muparser/%.cpp
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w -DMUPARSER_STATIC
+
+magpie/%.o: magpie/%.cpp
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w -DMUPARSER_STATIC -DFMT_HEADER_ONLY -std=c++20 -Imuparser -Imagpie
+
 ntrviewer.res.o: win_manifest.rc win_manifest.xml
 	windres --input $< --output $@ --output-format=coff
 
@@ -131,5 +141,5 @@ nuklear/stb_%.o: nuklear/stb_%.c
 
 clean:
 	-$(RM) $(TARGET)
-	-$(RM) *.o jpeg_turbo/jpeg8/*.o jpeg_turbo/jpeg12/*.o jpeg_turbo/jpeg16/*.o jpeg_turbo/*.o jpeg_turbo/simd/x86_64/*.o fsr/*.o fecal/*.o nuklear/*.o
-	-$(RM) *.d jpeg_turbo/jpeg8/*.d jpeg_turbo/jpeg12/*.d jpeg_turbo/jpeg16/*.d jpeg_turbo/*.d jpeg_turbo/simd/x86_64/*.d fsr/*.d fecal/*.d nuklear/*.d
+	-$(RM) *.o jpeg_turbo/jpeg8/*.o jpeg_turbo/jpeg12/*.o jpeg_turbo/jpeg16/*.o jpeg_turbo/*.o jpeg_turbo/simd/x86_64/*.o fsr/*.o fecal/*.o nuklear/*.o magpie/*.o muparser/*.o
+	-$(RM) *.d jpeg_turbo/jpeg8/*.d jpeg_turbo/jpeg12/*.d jpeg_turbo/jpeg16/*.d jpeg_turbo/*.d jpeg_turbo/simd/x86_64/*.d fsr/*.d fecal/*.d nuklear/*.d magpie/*.d muparser/*.d
