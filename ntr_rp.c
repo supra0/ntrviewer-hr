@@ -96,6 +96,7 @@ static void kcp_init(ikcpcb *kcp) {
 
 struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
 event_t decode_updated_event;
+bool ui_upscaling_filter;
 
 void rp_buffer_init(void) {
   for (int i = 0; i < SCREEN_COUNT; ++i) {

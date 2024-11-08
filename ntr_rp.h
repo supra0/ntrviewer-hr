@@ -7,7 +7,12 @@ thread_ret_t udp_recv_thread_func(void *);
 void rp_buffer_init(void);
 void rp_buffer_destroy(void);
 
+#ifdef __cplusplus
+#include <atomic>
+using namespace std;
+#else
 #include <stdatomic.h>
+#endif
 extern atomic_int frame_rate_decoded_tracker[SCREEN_COUNT];
 extern atomic_int frame_rate_displayed_tracker[SCREEN_COUNT];
 extern atomic_int frame_size_tracker[SCREEN_COUNT];
@@ -36,6 +41,10 @@ struct rp_buffer_ctx_t {
     ID3D11Texture2D *d3d_tex[SCREEN_COUNT];
     ID3D11ShaderResourceView *d3d_srv[SCREEN_COUNT];
 #endif
+    GLuint gl_tex_id[SCREEN_COUNT];
+    GLuint gl_tex_upscaled[SCREEN_COUNT];
+    GLuint gl_fbo_upscaled[SCREEN_COUNT];
+    GLuint tex_upscaled_prev[SCREEN_COUNT], tex_fsr_prev[SCREEN_COUNT];
 
     uint8_t screen_decoded[FBI_COUNT][SCREEN_HEIGHT0 * SCREEN_WIDTH * GL_CHANNELS_N];
     uint8_t screen_upscaled[SCREEN_HEIGHT0 * SCREEN_WIDTH * GL_CHANNELS_N * SCREEN_UPSCALE_FACTOR * SCREEN_UPSCALE_FACTOR];
@@ -56,5 +65,5 @@ struct rp_buffer_ctx_t {
 };
 extern struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
 extern event_t decode_updated_event;
-
+extern bool ui_upscaling_filter;
 #endif

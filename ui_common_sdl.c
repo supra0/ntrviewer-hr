@@ -3,8 +3,11 @@
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
 #include "ui_renderer_d3d11.h"
+#include "ui_renderer_ogl.h"
 #include "main.h"
 #include "ikcp.h"
+
+int is_renderer_ogl_dbg;
 
 enum ui_renderer_t ui_renderer;
 SDL_Window *ui_sdl_win[SCREEN_COUNT];
@@ -42,24 +45,21 @@ int ui_common_sdl_init(void) {
     SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "direct3d11");
 #endif
 
-    if (is_renderer_sdl_renderer()) {
-        if (SDL_Init(SDL_INIT_VIDEO)) {
-            err_log("SDL_Init: %s\n", SDL_GetError());
-            return -1;
-        }
+    if (opt_flag_angle) {
+        SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
     } else {
-        if (is_renderer_sdl_ogl()) {
-            if (is_renderer_gles_angle()) {
-                SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
-            } else {
-                SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "0");
-            }
-        }
+        SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "0");
+    }
 
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS)) {
-            err_log("SDL_Init: %s\n", SDL_GetError());
-            return -1;
-        }
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS)) {
+        err_log("SDL_Init: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    if (opt_flag_angle) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_EGL, 1);
+    } else {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_EGL, 0);
     }
 
     return 0;
@@ -282,6 +282,8 @@ void ui_windows_titles_update(void)
 static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, int index, view_mode_t view_mode, bool win_shared) {
     if (is_renderer_d3d11()) {
         ui_renderer_d3d11_draw(ctx, data, width, height, screen_top_bot, ctx_top_bot, index, view_mode, win_shared);
+    } else if (is_renderer_sdl_ogl()) {
+        ui_renderer_ogl_draw(ctx, data, width, height, screen_top_bot, ctx_top_bot, index, view_mode, win_shared);
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_draw(data, width, height, screen_top_bot, ctx_top_bot, view_mode);
     }
@@ -399,8 +401,8 @@ void draw_screen_get_dims(
     int i = ctx_top_bot;
 
     if (win_shared) {
-        win_width_drawable = ctx_width = ui_ctx_width[i];
-        win_height_drawable = ctx_height = ui_ctx_height[i];
+        win_width_drawable = ctx_width = ui_ctx_width[screen_top_bot];
+        win_height_drawable = ctx_height = ui_ctx_height[screen_top_bot];
         ctx_left_f = -1.0f;
         ctx_top_f = 1.0f;
         ctx_right_f = 1.0f;

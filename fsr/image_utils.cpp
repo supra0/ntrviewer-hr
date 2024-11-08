@@ -13,11 +13,10 @@
 
 #include <cstring>
 
-#ifdef USE_OGL_ES
-#define GLSL_VERSION "#version 310 es"
-#else
-#define GLSL_VERSION "#version 430"
-#endif
+#define GLES_GLSL_VERSION "#version 310 es"
+#define OGL_GLSL_VERSION "#version 430"
+
+#define GLSL_VERSION (is_renderer_gles() ? GLES_GLSL_VERSION : OGL_GLSL_VERSION)
 
 void prepareFSR(FSRConstants* fsrData, float rcasAttenuation)
 {

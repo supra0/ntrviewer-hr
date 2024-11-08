@@ -20,6 +20,8 @@ enum ui_renderer_t {
     UI_RENDERER_COUNT,
 };
 
+extern int is_renderer_ogl_dbg;
+
 extern enum ui_renderer_t ui_renderer;
 extern SDL_Window *ui_sdl_win[SCREEN_COUNT];
 extern struct nk_context *ui_nk_ctx;

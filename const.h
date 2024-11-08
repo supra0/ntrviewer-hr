@@ -177,6 +177,8 @@ enum frame_buffer_status_t
 #define TJ_FORMAT TJPF_RGBA
 #define SDL_FORMAT SDL_PIXELFORMAT_RGBA32
 #define D3D_FORMAT DXGI_FORMAT_R8G8B8A8_UNORM
+#define GL_INT_FORMAT GL_RGBA8
+#define GL_FORMAT GL_RGBA
 
 #define ui_font_scale_step_factor (32.0f)
 #define ui_font_scale_epsilon (1.0f / ui_font_scale_step_factor)

@@ -583,5 +583,10 @@ int ui_buffer_present(struct presentation_buffer_t *buf, int width, int height);
 
 // OGL
 int render_buffer_delete(struct render_buffer_t *b, int ctx_top_bot);
+int render_buffer_gen(struct render_buffer_t *b, int ctx_top_bot, int width, int height);
+int render_buffer_get(struct render_buffer_t *b, int ctx_top_bot, int width, int height, GLuint *tex, HANDLE *handle);
+GLuint ui_render_tex_get(int width, int height);
+int ui_tex_present(int count_max);
+int presentation_tex_present(int ctx_top_bot, int screen_top_bot, int win_shared, int count_max);
 
 #endif

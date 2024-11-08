@@ -13,6 +13,8 @@ enum nk_nav_t nk_nav_cmd;
 static struct nk_style nk_style_current;
 
 #include "nuklear_sdl_renderer.h"
+#include "nuklear_sdl_gl3.h"
+#include "nuklear_sdl_gles2.h"
 #ifdef _WIN32
 #include "nuklear_d3d11.h"
 #endif
@@ -24,6 +26,10 @@ void nk_font_stash_begin(struct nk_font_atlas **atlas) {
 #ifdef _WIN32
         nk_d3d11_font_stash_begin(atlas);
 #endif
+    } else if (is_renderer_ogl()) {
+        nk_sdl_gl3_font_stash_begin(atlas);
+    } else if (is_renderer_gles()) {
+        nk_sdl_gles2_font_stash_begin(atlas);
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_begin(atlas);
     }
@@ -34,6 +40,10 @@ void nk_font_stash_end(void) {
 #ifdef _WIN32
         nk_d3d11_font_stash_end();
 #endif
+    } else if (is_renderer_ogl()) {
+        nk_sdl_gl3_font_stash_end();
+    } else if (is_renderer_gles()) {
+        nk_sdl_gles2_font_stash_end();
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_end();
     }

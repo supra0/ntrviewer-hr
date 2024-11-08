@@ -68,7 +68,7 @@ static const char *d3d_ps_src =
     " return output;\n"
     "}\n";
 
-static ID3DBlob *compileShader(const char *src, const char *target)
+static ID3DBlob *compile_shader(const char *src, const char *target)
 {
     HRESULT hr;
     ID3DBlob *code;
@@ -87,9 +87,9 @@ static ID3DBlob *compileShader(const char *src, const char *target)
     return code;
 }
 
-static ID3D11VertexShader *loadVS(ID3D11Device *dev, const char *src, ID3DBlob **compiled)
+static ID3D11VertexShader *load_vs(ID3D11Device *dev, const char *src, ID3DBlob **compiled)
 {
-    ID3DBlob *code = compileShader(src, "vs_4_0");
+    ID3DBlob *code = compile_shader(src, "vs_4_0");
     if (!code) {
         return NULL;
     }
@@ -106,9 +106,9 @@ static ID3D11VertexShader *loadVS(ID3D11Device *dev, const char *src, ID3DBlob *
     return vs;
 }
 
-static ID3D11PixelShader *loadPS(ID3D11Device *dev, const char *src)
+static ID3D11PixelShader *load_ps(ID3D11Device *dev, const char *src)
 {
-    ID3DBlob *code = compileShader(src, "ps_4_0");
+    ID3DBlob *code = compile_shader(src, "ps_4_0");
     if (!code) {
         return NULL;
     }
@@ -130,11 +130,11 @@ static int d3d11_init(void) {
         HRESULT hr;
 
         ID3DBlob *vs_code;
-        d3d_vs[j] = loadVS(d3d11device[j], d3d_vs_src, &vs_code);
+        d3d_vs[j] = load_vs(d3d11device[j], d3d_vs_src, &vs_code);
         if (!d3d_vs[j]) {
             return -1;
         }
-        d3d_ps[j] = loadPS(d3d11device[j], d3d_ps_src);
+        d3d_ps[j] = load_ps(d3d11device[j], d3d_ps_src);
         if (!d3d_ps[j]) {
             return -1;
         }
@@ -705,7 +705,7 @@ fail:
         if (!sc_fail[p]) {
             HRESULT hr;
 
-            if (i == SCREEN_TOP) {
+            if (p == SCREEN_TOP) {
                 nk_d3d11_render(d3d11device_context[i], NK_ANTI_ALIASING_ON, ui_win_scale[i]);
                 nk_gui_next = 0;
             }

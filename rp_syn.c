@@ -1,8 +1,8 @@
+#include "const.h"
 #include "rp_syn.h"
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
-#include "const.h"
 
 #ifdef _WIN32
 #include <versionhelpers.h>

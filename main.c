@@ -4,6 +4,7 @@
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
 #include "ui_renderer_d3d11.h"
+#include "ui_renderer_ogl.h"
 #include "ntr_common.h"
 #ifdef _WIN32
 #include "nuklear_d3d11.h"
@@ -88,7 +89,7 @@ bool renderer_evt_sync;
 
 #include <getopt.h>
 
-static int UNUSED opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, opt_flag_sdl_hw, opt_flag_sdl_sw;
+int opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, opt_flag_sdl_hw, opt_flag_sdl_sw;
 
 #define opt_name_d3d "d3d"
 #define opt_name_ogl "ogl"
@@ -97,6 +98,7 @@ static int UNUSED opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt
 #define opt_name_sdl_hw "sdl-hw"
 #define opt_name_sdl_sw "sdl-sw"
 #define opt_name_no_csc "no-csc"
+#define opt_name_ogl_dbg "ogl-dbg"
 
 #define mod_name_csc "csc"
 
@@ -110,6 +112,7 @@ static struct option long_options[] = {
     {opt_name_angle, no_argument, &opt_flag_angle, 1},
     {opt_name_sdl_hw, no_argument, &opt_flag_sdl_hw, 1},
     {opt_name_sdl_sw, no_argument, &opt_flag_sdl_sw, 1},
+    {opt_name_ogl_dbg, no_argument, &is_renderer_ogl_dbg, 1},
     {0, 0, 0, 0}};
 
 static void add_arg(enum ui_renderer_t arg, const char *name) {
@@ -141,10 +144,10 @@ static void remove_csc_args(void) {
     }
 }
 
-static void remove_non_angle_ogl_args(void) {
+static void remove_ogl_args(void) {
     for (int i = 0; i < renderer_count;) {
         ui_renderer = renderer_list[i];
-        if (is_renderer_sdl_ogl() && !is_renderer_gles_angle()) {
+        if (is_renderer_sdl_ogl()) {
             for (int j = i + 1; j < renderer_count; ++j) {
                 renderer_list[j - 1] = renderer_list[j];
                 renderer_name_list[j - 1] = renderer_name_list[j];
@@ -189,6 +192,7 @@ static void parse_args(int argc, char **argv)
                         add_arg(UI_RENDERER_D3D11, opt_name_d3d);
                     } else if (strcmp(name, opt_name_ogl) == 0) {
                         if (!opt_flag_angle) {
+                            remove_ogl_args();
                             if (!opt_flag_no_csc) {
                                 add_arg(UI_RENDERER_OGL_CSC, opt_name_ogl " " mod_name_csc);
                             }
@@ -196,14 +200,15 @@ static void parse_args(int argc, char **argv)
                         }
                     } else if (strcmp(name, opt_name_gles) == 0) {
                         if (!opt_flag_angle) {
+                            remove_ogl_args();
                             if (!opt_flag_no_csc) {
                                 add_arg(UI_RENDERER_GLES_CSC, opt_name_gles " " mod_name_csc);
                             }
                             add_arg(UI_RENDERER_GLES, opt_name_gles);
                         }
                     } else if (strcmp(name, opt_name_angle) == 0) {
+                        remove_ogl_args();
                         add_arg(UI_RENDERER_GLES_ANGLE, opt_name_angle);
-                        remove_non_angle_ogl_args();
                     } else if (strcmp(name, opt_name_sdl_hw) == 0) {
                         add_arg(UI_RENDERER_SDL_HW, opt_name_sdl_hw);
                     } else if (strcmp(name, opt_name_sdl_sw) == 0) {
@@ -217,24 +222,14 @@ static void parse_args(int argc, char **argv)
         }
     }
 
+    if (is_renderer_ogl_dbg) {
+        printf("using %s\n", opt_name_ogl_dbg);
+    }
+
     if (renderer_count) {
         printf("using drivers:\n");
-        bool ui_renderer_set = 0;
         for (int i = 0; i < renderer_count; ++i) {
             printf("%s\n", renderer_name_list[i]);
-
-            if (!ui_renderer_set) {
-                ui_renderer = renderer_list[i];
-                ui_renderer_set = 1;
-            }
-
-            if (is_renderer_sdl_renderer()) {
-                enum ui_renderer_t renderer = ui_renderer;
-                ui_renderer = renderer_list[i];
-                if (is_renderer_sdl_renderer()) {
-                    ui_renderer = renderer;
-                }
-            }
         }
         return;
     }
@@ -256,8 +251,6 @@ static void parse_args(int argc, char **argv)
         ++j;
     }
     renderer_count = j;
-
-    ui_renderer = renderer_list[0];
 }
 
 #ifdef _WIN32
@@ -434,6 +427,8 @@ static void thread_loop(int i) {
 
     if (is_renderer_d3d11()) {
         ui_renderer_d3d11_main(screen_top_bot, ctx_top_bot, view_mode, win_shared, bg);
+    } else if (is_renderer_sdl_ogl()) {
+        ui_renderer_ogl_main(screen_top_bot, ctx_top_bot, view_mode, win_shared, bg);
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_main(ctx_top_bot, view_mode, bg);
     }
@@ -482,6 +477,8 @@ static void thread_loop(int i) {
 
     if (is_renderer_d3d11()) {
         ui_renderer_d3d11_present(screen_top_bot, ctx_top_bot, win_shared);
+    } else if (is_renderer_sdl_ogl()) {
+        ui_renderer_ogl_present(screen_top_bot, ctx_top_bot, win_shared);
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_present(ctx_top_bot);
     }
@@ -494,7 +491,8 @@ static thread_ret_t window_thread_func(void *arg) {
     RO_INIT();
 
     int i = (int)(uintptr_t)arg;
-    // TODO ogl
+    if (is_renderer_sdl_ogl())
+        SDL_GL_MakeCurrent(ogl_win[i], gl_context[i]);
     while (program_running)
         thread_loop(i);
     // TODO csc
@@ -800,6 +798,11 @@ int main(int argc, char **argv) {
                 ui_renderer_d3d11_destroy();
             else
                 renderer_inited = 1;
+        } else if (is_renderer_sdl_ogl()) {
+            if (ui_renderer_ogl_init())
+                ui_renderer_ogl_destroy();
+            else
+                renderer_inited = 1;
         } else if (is_renderer_sdl_renderer()) {
             if (ui_renderer_sdl_init())
                 ui_renderer_sdl_destroy();
@@ -818,6 +821,8 @@ int main(int argc, char **argv) {
 
     if (is_renderer_d3d11())
         ui_renderer_d3d11_destroy();
+    else if (is_renderer_sdl_ogl())
+        ui_renderer_ogl_destroy();
     else if (is_renderer_sdl_renderer())
         ui_renderer_sdl_destroy();
 

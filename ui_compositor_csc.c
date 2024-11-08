@@ -145,7 +145,7 @@ static void composition_buffer_cleanup(int ctx_top_bot) {
     int i = ctx_top_bot;
     src_rect[i].bottom = src_rect[i].right = 0;
     for (int j = 0; j < SCREEN_COUNT; ++j) {
-        // i here is tied to the respective GL context, where as in render_buffer_delete it's top_bot
+        // i here is tied to the respective GL context, where as in render_buffer_delete it's screen_top_bot
         // hence the reversed order of parameters
         if (is_renderer_sdl_ogl()) {
             struct render_buffer_t *b = &render_buffers[j][i];
@@ -1310,9 +1310,225 @@ int update_hide_ui(void)
     return 0;
 }
 
-int render_buffer_delete(struct render_buffer_t *b, int ctx_top_bot) {
-    // TODO
-    (void)b;
-    (void)ctx_top_bot;
+int render_buffer_delete(struct render_buffer_t *b, int ctx_top_bot)
+{
+    if (b->gl_handle) {
+        // In case of gl device lost (e.g. graphics driver reset) this will crash on NVIDIA.
+        wglDXUnregisterObjectNV(gl_d3ddevice[ctx_top_bot], b->gl_handle);
+        b->gl_handle = NULL;
+    }
+
+    if (b->gl_tex) {
+        glDeleteRenderbuffers(1, &b->gl_tex);
+        b->gl_tex = 0;
+    }
+
+    if (b->tex) {
+        ID3D11Texture2D_Release(b->tex);
+        b->tex = NULL;
+    }
+
+    b->width = 0;
+    b->height = 0;
+
+    return 0;
+}
+
+int render_buffer_gen(struct render_buffer_t *b, int ctx_top_bot, int width, int height)
+{
+    D3D11_TEXTURE2D_DESC tex_desc = {};
+    tex_desc.Width = width;
+    tex_desc.Height = height;
+    tex_desc.MipLevels = 1;
+    tex_desc.ArraySize = 1;
+    tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.SampleDesc.Quality = 0;
+    tex_desc.Usage = D3D11_USAGE_DEFAULT;
+    tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    tex_desc.MiscFlags = 0;
+    tex_desc.CPUAccessFlags = 0;
+
+    HRESULT hr;
+
+    int i = ctx_top_bot;
+
+    hr = ID3D11Device_CreateTexture2D(d3d11device[i], &tex_desc, NULL, &b->tex);
+    if (hr) {
+        err_log("CreateTexture2D failed: %d\n", (int)hr);
+        goto fail;
+    }
+
+    glGenRenderbuffers(1, &b->gl_tex);
+    b->gl_handle = wglDXRegisterObjectNV(gl_d3ddevice[i], b->tex, b->gl_tex, GL_RENDERBUFFER, WGL_ACCESS_WRITE_DISCARD_NV);
+    if (!b->gl_handle) {
+        err_log("wglDXRegisterObjectNV failed: %d\n", (int)GetLastError());
+        goto fail;
+    }
+
+    b->width = width;
+    b->height = height;
+
+    return 0;
+
+fail:
+    render_buffer_delete(b, i);
+    return -1;
+}
+
+int render_buffer_get(struct render_buffer_t *b, int ctx_top_bot, int width, int height, GLuint *tex, HANDLE *handle)
+{
+    int i = ctx_top_bot;
+
+    if (b->width != width || b->height != height) {
+        if (render_buffer_delete(b, i) != 0) {
+            return -1;
+        }
+
+        if (render_buffer_gen(b, i, width, height) != 0) {
+            return -1;
+        }
+    }
+
+    *tex = b->gl_tex;
+    *handle = b->gl_handle;
+
+    return 0;
+}
+
+static GLuint ui_render_tex;
+static int ui_render_width, ui_render_height;
+GLuint ui_render_tex_get(int width, int height)
+{
+    if (ui_render_width == width && ui_render_height == height) {
+        return ui_render_tex;
+    }
+
+    if (ui_render_tex) {
+        glDeleteTextures(1, &ui_render_tex);
+        ui_render_tex = 0;
+        ui_render_width = 0;
+        ui_render_height = 0;
+    }
+
+    glGenTextures(1, &ui_render_tex);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, ui_render_tex);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0,
+        GL_INT_FORMAT,
+        width,
+        height, 0,
+        GL_FORMAT, GL_UNSIGNED_BYTE,
+        0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    ui_render_width = width;
+    ui_render_height = height;
+    return ui_render_tex;
+}
+
+int ui_tex_present(int count_max)
+{
+    struct render_buffer_t *b = &ui_render_buf;
+
+    int i = SCREEN_TOP;
+    int j = SURFACE_UTIL_UI;
+    int index_sc;
+    struct presentation_buffer_t *bufs = ui_pres_bufs;
+    if (presentation_buffer_get(bufs, j, -1, count_max, b->width, b->height, &index_sc) != 0) {
+        return -1;
+    }
+
+    ID3D11DeviceContext_CopyResource(d3d11device_context[i], (ID3D11Resource *)bufs[index_sc].tex, (ID3D11Resource *)b->tex);
+
+    HRESULT hr;
+
+    hr = IPresentationSurface_SetBuffer(pres_surf_util[j], bufs[index_sc].buf);
+    if (hr) {
+        err_log("SetBuffer failed: %d\n", (int)hr);
+        return -1;
+    }
+
+    RECT *rect;
+    rect = &src_rect_util[j];
+    if (rect->right != b->width || rect->bottom != b->height) {
+        rect->right = b->width;
+        rect->bottom = b->height;
+        hr = IPresentationSurface_SetSourceRect(pres_surf_util[j], rect);
+        if (hr) {
+            err_log("SetSourceRect failed: %d\n", (int)hr);
+            return hr;
+        }
+    }
+
+    hr = IPresentationManager_Present(pres_man_util[j]);
+    if (hr) {
+        err_log("Present failed: %d\n", (int)hr);
+        if (hr == DXGI_ERROR_DEVICE_REMOVED) {
+            hr = ID3D11Device_GetDeviceRemovedReason(d3d11device[i]);
+            err_log("GetDeviceRemovedReason: %d\n", (int)hr);
+        }
+        ui_compositing = 0;
+        return -1;
+    }
+
+    return 0;
+}
+
+int presentation_tex_present(int ctx_top_bot, int screen_top_bot, int win_shared, int count_max)
+{
+    int i = ctx_top_bot;
+
+    struct render_buffer_t *b = &render_buffers[i][screen_top_bot];
+
+    int index_sc;
+    struct presentation_buffer_t *bufs = presentation_buffers[i][screen_top_bot];
+    if (presentation_buffer_get(bufs, win_shared ? screen_top_bot : i, win_shared, count_max, b->width, b->height, &index_sc) != 0) {
+        return -1;
+    }
+
+    ID3D11DeviceContext_CopyResource(d3d11device_context[i], (ID3D11Resource *)bufs[index_sc].tex, (ID3D11Resource *)b->tex);
+
+    HRESULT hr;
+
+    hr = IPresentationSurface_SetBuffer(
+        win_shared ? pres_surf_child[screen_top_bot] : presentation_surface[i],
+        bufs[index_sc].buf);
+    if (hr) {
+        err_log("SetBuffer failed: %d\n", (int)hr);
+        return -1;
+    }
+
+    RECT *rect;
+    rect = win_shared ? &src_rect_child[screen_top_bot] : &src_rect[i];
+    if (rect->right != b->width || rect->bottom != b->height) {
+        rect->right = b->width;
+        rect->bottom = b->height;
+        hr = IPresentationSurface_SetSourceRect(
+            win_shared ? pres_surf_child[screen_top_bot] : presentation_surface[i],
+            rect);
+        if (hr) {
+            err_log("SetSourceRect failed: %d\n", (int)hr);
+            return hr;
+        }
+    }
+
+    // err_log("%d %llu\n", win_shared ? screen_top_bot : i, (unsigned long long)IPresentationManager_GetNextPresentId(win_shared ? pres_man_child[screen_top_bot] : presentation_manager[i]));
+    hr = IPresentationManager_Present(win_shared ? pres_man_child[screen_top_bot] : presentation_manager[i]);
+    if (hr) {
+        err_log("Present %d %d failed: %d\n", win_shared, win_shared ? screen_top_bot : i, (int)hr);
+        if (hr == DXGI_ERROR_DEVICE_REMOVED) {
+            hr = ID3D11Device_GetDeviceRemovedReason(d3d11device[i]);
+            err_log("GetDeviceRemovedReason: %d\n", (int)hr);
+        }
+        ui_compositing = 0;
+        return -1;
+    }
+
     return 0;
 }

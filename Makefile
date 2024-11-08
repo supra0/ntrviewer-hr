@@ -16,7 +16,7 @@ else
 	NASM := -DELF -felf64
 endif
 
-GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o
+GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o
 ifeq ($(OS),Windows_NT)
 GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o
 endif
@@ -89,7 +89,7 @@ jpeg_turbo/jpeg16/%.o: jpeg_turbo/jpeg16/%.c
 	nasm $< -o $@ $(NASM) -D__x86_64__ -Ijpeg_turbo/simd/nasm -Ijpeg_turbo/simd
 
 %.o: %.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS)
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
 
 ntrviewer.res.o: win_manifest.rc win_manifest.xml
 	windres --input $< --output $@ --output-format=coff
