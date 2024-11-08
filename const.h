@@ -196,4 +196,6 @@ typedef int64_t s64;
 
 #include "glad/glad.h"
 
+#define SCREEN_UPSCALE_FACTOR 2
+
 #endif

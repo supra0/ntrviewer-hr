@@ -24,13 +24,6 @@ extern atomic_bool kcp_restart;
 
 #include "ui_common_sdl.h"
 #include "rp_syn.h"
-#define SCREEN_UPSCALE_FACTOR 2
-
-#define sr_create(...) (0)
-#define sr_run(...) (0)
-#define sr_next(...) ((void)0)
-#define sr_destroy(...) ((void)0)
-#define sr_reset() ((void)0)
 
 #ifdef _WIN32
 #include <d3d11.h>
@@ -40,6 +33,10 @@ struct rp_buffer_ctx_t {
 #ifdef _WIN32
     ID3D11Texture2D *d3d_tex[SCREEN_COUNT];
     ID3D11ShaderResourceView *d3d_srv[SCREEN_COUNT];
+    IDXGIKeyedMutex *d3d_mutex_upscaled[SCREEN_COUNT]; // Non-owning
+    ID3D11ShaderResourceView *d3d_srv_upscaled[SCREEN_COUNT]; // Non-owning
+    ID3D11Texture2D *d3d_tex_upscaled_prev[SCREEN_COUNT];
+    ID3D11ShaderResourceView *d3d_srv_upscaled_prev[SCREEN_COUNT];
 #endif
     GLuint gl_tex_id[SCREEN_COUNT];
     GLuint gl_tex_upscaled[SCREEN_COUNT];
@@ -65,5 +62,6 @@ struct rp_buffer_ctx_t {
 };
 extern struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
 extern event_t decode_updated_event;
-extern bool ui_upscaling_filter;
+extern bool render_upscaling_filter;
+extern bool render_upscaling_filter_created;
 #endif

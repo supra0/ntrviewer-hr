@@ -6,22 +6,15 @@
 #include <string>
 
 // ncnn
-#if 0
-#include "net.h"
-#include "gpu.h"
-#include "layer.h"
-#else
 #include "ncnn/net.h"
 #include "ncnn/gpu.h"
 #include "ncnn/layer.h"
-#endif
 
-#ifdef USE_D3D11
+#ifdef _WIN32
 #include <d3d11.h>
 #include <dxgi1_2.h>
-#else
-#include "glad/glad.h"
 #endif
+#include "glad/glad.h"
 
 class FeatureCache;
 
@@ -50,20 +43,20 @@ public:
 #else
     int memory = 0;
 #endif
-#ifdef USE_D3D11
+
+#ifdef _WIN32
     ID3D11Resource *d3d_resource = NULL;
     IDXGIKeyedMutex *dxgi_mutex = NULL;
     ID3D11ShaderResourceView *d3d_srv = NULL;
     IDXGIResource1 *dxgi_res = NULL;
     HANDLE d3d_handle = NULL;
-#else
+#endif
     GLuint gl_memory = 0;
     GLuint gl_texture = 0;
-#endif
+
     bool dedicated = 0;
     VkExternalMemoryHandleTypeFlagBits memory_type = (VkExternalMemoryHandleTypeFlagBits)0;
 
-#ifndef USE_D3D11
     VkSemaphore vk_sem = 0, vk_sem_next = 0;
 #ifdef _WIN32
     HANDLE sem = 0, sem_next = 0;
@@ -71,7 +64,6 @@ public:
     int sem = 0, sem_next = 0;
 #endif
     GLuint gl_sem = 0, gl_sem_next = 0;
-#endif
     void create_sem(const RealCUGAN* cugan);
     void destroy_sem(const RealCUGAN* cugan);
 
@@ -89,14 +81,34 @@ public:
 class RealCUGAN
 {
 public:
-#ifdef USE_D3D11
+#ifdef _WIN32
     RealCUGAN(int gpuid, ID3D11Device **dev, ID3D11DeviceContext **ctx, bool tta_mode = false, int num_threads = 1);
 
     ID3D11Device **const dev = NULL;
     ID3D11DeviceContext **const ctx = NULL;
-#else
-    RealCUGAN(int gpuid, bool tta_mode = false, int num_threads = 1);
 #endif
+    RealCUGAN(int gpuid, bool tta_mode = false, int num_threads = 1);
+
+    bool d3d11 = false;
+    void init(int gpuid, bool _tta_mode, int num_threads) {
+        vkdev = gpuid == -1 ? 0 : ncnn::get_gpu_device(gpuid);
+
+        net.opt.num_threads = num_threads;
+
+        realcugan_preproc = 0;
+        realcugan_postproc = 0;
+        realcugan_4x_postproc = 0;
+        bicubic_2x = 0;
+        bicubic_3x = 0;
+        bicubic_4x = 0;
+        tta_mode = _tta_mode;
+
+        if (vkdev) {
+            blob_vkallocator = vkdev->acquire_blob_allocator();
+            staging_vkallocator = vkdev->acquire_staging_allocator();
+        }
+    }
+
     ~RealCUGAN();
 
 #if _WIN32
@@ -106,37 +118,6 @@ public:
 #endif
 
     int process(int index, const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-#if 0
-    int process_cpu(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_se(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_cpu_se(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_se_rough(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_cpu_se_rough(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_se_very_rough(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-    int process_cpu_se_very_rough(const ncnn::Mat& inimage, ncnn::Mat& outimage) const;
-
-protected:
-    int process_se_stage0(const ncnn::Mat& inimage, const std::vector<std::string>& names, const std::vector<std::string>& outnames, const ncnn::Option& opt, FeatureCache& cache) const;
-    int process_se_stage2(const ncnn::Mat& inimage, const std::vector<std::string>& names, ncnn::Mat& outimage, const ncnn::Option& opt, FeatureCache& cache) const;
-    int process_se_sync_gap(const ncnn::Mat& inimage, const std::vector<std::string>& names, const ncnn::Option& opt, FeatureCache& cache) const;
-
-    int process_se_very_rough_stage0(const ncnn::Mat& inimage, const std::vector<std::string>& names, const std::vector<std::string>& outnames, const ncnn::Option& opt, FeatureCache& cache) const;
-    int process_se_very_rough_sync_gap(const ncnn::Mat& inimage, const std::vector<std::string>& names, const ncnn::Option& opt, FeatureCache& cache) const;
-
-    int process_cpu_se_stage0(const ncnn::Mat& inimage, const std::vector<std::string>& names, const std::vector<std::string>& outnames, FeatureCache& cache) const;
-    int process_cpu_se_stage2(const ncnn::Mat& inimage, const std::vector<std::string>& names, ncnn::Mat& outimage, FeatureCache& cache) const;
-    int process_cpu_se_sync_gap(const ncnn::Mat& inimage, const std::vector<std::string>& names, FeatureCache& cache) const;
-
-    int process_cpu_se_very_rough_stage0(const ncnn::Mat& inimage, const std::vector<std::string>& names, const std::vector<std::string>& outnames, FeatureCache& cache) const;
-    int process_cpu_se_very_rough_sync_gap(const ncnn::Mat& inimage, const std::vector<std::string>& names, FeatureCache& cache) const;
-#endif
 
 public:
     // realcugan parameters

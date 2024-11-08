@@ -8,6 +8,7 @@ static SDL_Window *sdl_win[SCREEN_COUNT];
 static struct nk_context *nk_ctx;
 
 #include "nuklear_d3d11.h"
+#include "realcugan-ncnn-vulkan/lib.h"
 
 #include <versionhelpers.h>
 
@@ -346,12 +347,16 @@ static int d3d11_renderer_init(void) {
         return -1;
     }
 
+    ui_upscaling_filters = 1;
+
     err_log("d3d11 %s\n", is_renderer_csc() ? "composition swapchain" : "");
 
     return 0;
 }
 
 static void d3d11_renderer_destroy(void) {
+    ui_upscaling_filters = 0;
+
     d3d11_close();
 
     if (nk_ctx) {
@@ -557,8 +562,119 @@ void ui_renderer_d3d11_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int widt
     int i = ctx_top_bot;
 
     if (upscaled) {
-        // TODO
-        (void)index;
+        if (!data) {
+            if (!ctx->d3d_srv_upscaled[i]) {
+                data = ctx->data_prev;
+            }
+        }
+        if (data) {
+            bool dim3;
+            bool success;
+            ctx->d3d_mutex_upscaled[i] = NULL;
+            ctx->d3d_srv_upscaled[i] = NULL;
+            ID3D11Resource *res = realcugan_d3d11_run(i, screen_top_bot, index, height, width, GL_CHANNELS_N, data, ctx->screen_upscaled, &ctx->d3d_mutex_upscaled[i], &ctx->d3d_srv_upscaled[i], &dim3, &success);
+            if (res) {
+                hr = IDXGIKeyedMutex_AcquireSync(ctx->d3d_mutex_upscaled[i], 1, 2000);
+                if (hr) {
+                    err_log("AcquireSync failed: %d\n", (int)hr);
+                    return;
+                }
+
+                ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ctx->d3d_srv_upscaled[i]);
+                d3d11_draw_screen(i, screen_top_bot, vertices);
+                ID3D11ShaderResourceView *ptr_null = NULL;
+                ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ptr_null);
+
+                hr = IDXGIKeyedMutex_ReleaseSync(ctx->d3d_mutex_upscaled[i], 0);
+                if (hr) {
+                    err_log("ReleaseSync failed: %d\n", (int)hr);
+                    return;
+                }
+                return;
+            } else {
+                if (success) {
+                    int scale = SCREEN_UPSCALE_FACTOR;
+                    width *= scale;
+                    height *= scale;
+                    if (!ctx->d3d_srv_upscaled_prev[i]) {
+                        CHECK_AND_RELEASE(ctx->d3d_tex_upscaled_prev[i]);
+
+                        D3D11_TEXTURE2D_DESC tex_desc = {};
+                        tex_desc.Width = height;
+                        tex_desc.Height = width;
+                        tex_desc.MipLevels = 1;
+                        tex_desc.ArraySize = 1;
+                        tex_desc.Format = D3D_FORMAT;
+                        tex_desc.SampleDesc.Count = 1;
+                        tex_desc.SampleDesc.Quality = 0;
+                        tex_desc.Usage = D3D11_USAGE_DYNAMIC;
+                        tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                        tex_desc.MiscFlags = 0;
+                        tex_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+                        hr = ID3D11Device_CreateTexture2D(d3d11device[i], &tex_desc, NULL, &ctx->d3d_tex_upscaled_prev[i]);
+                        if (hr) {
+                            err_log("CreateTexture2D failed: %d\n", (int)hr);
+                            return;
+                        }
+
+                        hr = ID3D11Device_CreateShaderResourceView(d3d11device[i], (ID3D11Resource *)ctx->d3d_tex_upscaled_prev[i], NULL, &ctx->d3d_srv_upscaled_prev[i]);
+                        if (hr) {
+                            err_log("CreateShaderResourceView failed: %d\n", (int)hr);
+                            CHECK_AND_RELEASE(ctx->d3d_tex_upscaled_prev[i]);
+                            return;
+                        }
+                    }
+
+                    D3D11_MAPPED_SUBRESOURCE tex_mapped = {};
+                    hr = ID3D11DeviceContext_Map(d3d11device_context[i], (ID3D11Resource *)ctx->d3d_tex_upscaled_prev[i], 0, D3D11_MAP_WRITE_DISCARD, 0, &tex_mapped);
+                    if (hr) {
+                        err_log("Map failed: %d", (int)hr);
+                        return;
+                    }
+                    for (int i = 0; i < width; ++i) {
+                        memcpy(tex_mapped.pData + i * tex_mapped.RowPitch, ctx->screen_upscaled + i * height * 4, height * 4);
+                    }
+
+                    ID3D11DeviceContext_Unmap(d3d11device_context[i], (ID3D11Resource *)ctx->d3d_tex_upscaled_prev[i], 0);
+
+                    ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ctx->d3d_srv_upscaled_prev[i]);
+                    d3d11_draw_screen(i, screen_top_bot, vertices);
+                    ID3D11ShaderResourceView *ptr_null = NULL;
+                    ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ptr_null);
+                } else {
+                    render_upscaling_filter = 0;
+                    err_log("upscaling failed; filter disabled\n");
+                }
+                return;
+            }
+        } else if (ctx->d3d_srv_upscaled[i]) {
+            hr = IDXGIKeyedMutex_AcquireSync(ctx->d3d_mutex_upscaled[i], 0, 2000);
+            if (hr) {
+                err_log("AcquireSync failed: %d\n", (int)hr);
+                return;
+            }
+
+            ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ctx->d3d_srv_upscaled[i]);
+            d3d11_draw_screen(i, screen_top_bot, vertices);
+            ID3D11ShaderResourceView *ptr_null = NULL;
+            ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ptr_null);
+
+            hr = IDXGIKeyedMutex_ReleaseSync(ctx->d3d_mutex_upscaled[i], 0);
+            if (hr) {
+                err_log("ReleaseSync failed: %d\n", (int)hr);
+                return;
+            }
+            return;
+        } else if (ctx->d3d_srv_upscaled_prev[i]) {
+            ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ctx->d3d_srv_upscaled_prev[i]);
+            d3d11_draw_screen(i, screen_top_bot, vertices);
+            ID3D11ShaderResourceView *ptr_null = NULL;
+            ID3D11DeviceContext_PSSetShaderResources(d3d11device_context[i], 0, 1, &ptr_null);
+        } else {
+            err_log("no data\n");
+        }
+        return;
     }
 
     if (data) {

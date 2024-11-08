@@ -16,7 +16,7 @@ else
 	NASM := -DELF -felf64
 endif
 
-GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o
+GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o
 ifeq ($(OS),Windows_NT)
 GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o
 endif
@@ -95,10 +95,10 @@ ntrviewer.res.o: win_manifest.rc win_manifest.xml
 	windres --input $< --output $@ --output-format=coff
 
 realcugan_lib.o: realcugan-ncnn-vulkan/lib.cpp
-	$(CXX) realcugan-ncnn-vulkan/lib.cpp -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-attributes
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
 
 realcugan.o: realcugan-ncnn-vulkan/realcugan.cpp
-	$(CXX) realcugan-ncnn-vulkan/realcugan.cpp -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-attributes
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
 
 fecal/gf256.o: fecal/gf256.cpp
 	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-implicit-fallthrough -DGF256_TARGET_MOBILE

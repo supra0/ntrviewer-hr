@@ -11,8 +11,11 @@ enum nk_nav_t {
 extern enum nk_nav_t nk_nav_cmd;
 
 #include <stdatomic.h>
+#include <stdbool.h>
 
 extern atomic_bool ui_hide_nk_windows;
+extern bool ui_upscaling_filters;
+
 void ui_main_nk(void);
 void nk_backend_font_init(void);
 

@@ -2,6 +2,8 @@
 #include "main.h"
 #include "ui_main_nk.h"
 
+#include "glad/glad_wgl.h"
+
 IDXGIAdapter1 *dxgi_adapter;
 IDXGIFactory2 *dxgi_factory;
 
@@ -124,9 +126,40 @@ int dxgi_init(void)
         }
 
         bool is_hardware = adapter_desc.Flags == DXGI_ADAPTER_FLAG_NONE;
-        if (is_hardware)
-            break;
+        if (is_hardware) {
+            if (is_renderer_sdl_ogl()) {
+                D3D_FEATURE_LEVEL featureLevelSupported;
+                ID3D11Device *dev;
+                ID3D11DeviceContext *ctx;
+                HANDLE gl_dev;
 
+                hr = D3D11CreateDevice(
+                    (IDXGIAdapter *)dxgi_adapter,
+                    0, NULL,
+                    D3D11_CREATE_DEVICE_BGRA_SUPPORT |
+                        D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
+                    NULL, 0, D3D11_SDK_VERSION, &dev, &featureLevelSupported,
+                    &ctx);
+                if (hr) {
+                    goto next;
+                }
+
+                gl_dev = wglDXOpenDeviceNV(dev);
+                if (!gl_dev) {
+                    CHECK_AND_RELEASE(dev);
+                    CHECK_AND_RELEASE(ctx);
+                    goto next;
+                }
+
+                wglDXCloseDeviceNV(gl_dev);
+                CHECK_AND_RELEASE(dev);
+                CHECK_AND_RELEASE(ctx);
+            }
+            err_log("using adapter %d\n", i);
+            break;
+        }
+
+next:
         CHECK_AND_RELEASE(dxgi_adapter);
     }
 
@@ -315,8 +348,6 @@ static int presentation_render_reset(int win_shared, bool bg)
 
     return 0;
 }
-
-#include "glad/glad_wgl.h"
 
 int composition_swapchain_device_init(void)
 {

@@ -17,7 +17,9 @@ static struct nk_style nk_style_current;
 #include "nuklear_sdl_gles2.h"
 #ifdef _WIN32
 #include "nuklear_d3d11.h"
+#include "ui_compositor_csc.h"
 #endif
+#include "realcugan-ncnn-vulkan/lib.h"
 
 #include <limits.h>
 
@@ -71,12 +73,13 @@ void nk_backend_font_init(void)
 }
 
 atomic_bool ui_hide_nk_windows;
+bool ui_upscaling_filters;
 
 static const char *nk_property_name = "#";
 static enum NK_FOCUS {
     NK_FOCUS_NONE,
     NK_FOCUS_VIEW_MODE,
-    // TODO upscaling filters
+    NK_FOCUS_UPSCALING_FILTER,
     NK_FOCUS_IP_OCTET_0,
     NK_FOCUS_IP_OCTET_1,
     NK_FOCUS_IP_OCTET_2,
@@ -188,6 +191,10 @@ static void do_nav_next(enum NK_FOCUS nk_focus)
                 nk_focus_current = NK_FOCUS_MAX;
             else
                 --nk_focus_current;
+
+            if (!ui_upscaling_filters && nk_focus_current == NK_FOCUS_UPSCALING_FILTER)
+                --nk_focus_current;
+
             nk_nav_focus = NK_NAV_FOCUS_NAV;
             break;
 
@@ -196,6 +203,10 @@ static void do_nav_next(enum NK_FOCUS nk_focus)
                 nk_focus_current = NK_FOCUS_MIN;
             else
                 ++nk_focus_current;
+
+            if (!ui_upscaling_filters && nk_focus_current == NK_FOCUS_UPSCALING_FILTER)
+                ++nk_focus_current;
+
             nk_nav_focus = NK_NAV_FOCUS_NAV;
             break;
 
@@ -522,7 +533,46 @@ void ui_main_nk(void)
             ui_fullscreen = 0;
         }
 
-        // TODO upscaling filters
+        if (ui_upscaling_filters) {
+            nk_layout_row_dynamic(ctx, 30, 2);
+            nk_label(ctx, "Upscaling Filter", NK_TEXT_CENTERED);
+            int upscaling_selected = render_upscaling_filter ? 1 : 0;
+            selected = upscaling_selected;
+            const char *upscaling_filter_options[] = {
+                "None",
+                "Real-CUGAN",
+            };
+            do_nav_combobox_next(ctx, NK_FOCUS_UPSCALING_FILTER, &selected, sizeof(upscaling_filter_options) / sizeof(*upscaling_filter_options));
+            nk_combobox(ctx, upscaling_filter_options, sizeof(upscaling_filter_options) / sizeof(*upscaling_filter_options), &selected, 30, combo_size);
+            check_nav_combobox_prev(ctx);
+            if (selected != upscaling_selected) {
+                set_nav_combobox_prev(NK_FOCUS_UPSCALING_FILTER);
+                if (selected == 1) {
+                    if (!render_upscaling_filter_created) {
+                        int ret = 0;
+                        if (is_renderer_d3d11()) {
+#ifdef _WIN32
+                            ret = realcugan_d3d11_create(d3d11device, d3d11device_context, dxgi_adapter);
+#endif
+                        } else if (is_renderer_sdl_ogl()) {
+                            ret = realcugan_ogl_create();
+                        }
+                        if (ret < 0) {
+                            err_log("Real-CUGAN init failed\n");
+                            render_upscaling_filter = 0;
+                            selected = 1;
+                        } else {
+                            render_upscaling_filter = 1;
+                            render_upscaling_filter_created = 1;
+                        }
+                    } else {
+                        render_upscaling_filter = 1;
+                    }
+                } else {
+                    render_upscaling_filter = 0;
+                }
+            }
+        }
 
         nk_layout_row_dynamic(ctx, 30, 5);
         nk_label(ctx, "3DS IP", NK_TEXT_CENTERED);

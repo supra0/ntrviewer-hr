@@ -10,6 +10,7 @@
 #include "nuklear_sdl_gles2.h"
 #include "ui_main_nk.h"
 #include "fsr/fsr_main.h"
+#include "realcugan-ncnn-vulkan/lib.h"
 
 SDL_Window *ogl_win[SCREEN_COUNT];
 static SDL_Window *csc_win[SCREEN_COUNT];
@@ -524,12 +525,16 @@ static int ogl_renderer_init(void) {
     if (ogl_res_init())
         return -1;
 
+    ui_upscaling_filters = 1;
+
     err_log("%s %s\n", is_renderer_ogl() ? "ogl" : is_renderer_gles_angle() ? "angle" : "gles", is_renderer_csc() ? "composition swapchain" : "");
 
     return 0;
 }
 
 static void ogl_renderer_destroy(void) {
+    ui_upscaling_filters = 0;
+
     ogl_res_destroy();
 
     if (nk_ctx) {
@@ -719,8 +724,6 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
     bool success = false;
 
     if (upscaled) {
-        (void)index;
-
         if (!data) {
             if (!ctx->tex_upscaled_prev[i]) {
                 data = ctx->data_prev;
@@ -733,11 +736,11 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
 
         if (data) {
             scale = SCREEN_UPSCALE_FACTOR;
-            tex_upscaled = sr_run(i, screen_top_bot, index, height, width, GL_CHANNELS_N, data, ctx->screen_upscaled, &gl_sem, &gl_sem_next, &dim3, &success);
+            tex_upscaled = realcugan_ogl_run(i, screen_top_bot, index, height, width, GL_CHANNELS_N, data, ctx->screen_upscaled, &gl_sem, &gl_sem_next, &dim3, &success);
             if (!tex_upscaled) {
                 if (!success) {
                     upscaled = 0;
-                    ui_upscaling_filter = 0;
+                    render_upscaling_filter = 0;
                     err_log("upscaling failed; filter disabled\n");
                 } else {
                     glActiveTexture(GL_TEXTURE0);

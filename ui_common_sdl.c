@@ -7,6 +7,8 @@
 #include "main.h"
 #include "ikcp.h"
 
+#include "realcugan-ncnn-vulkan/lib.h"
+
 int is_renderer_ogl_dbg;
 
 enum ui_renderer_t ui_renderer;
@@ -291,7 +293,7 @@ static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int
 }
 
 int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared) {
-    sr_next(ctx_top_bot, screen_top_bot, ctx->index_display_2);
+    realcugan_next(ctx_top_bot, screen_top_bot, ctx->index_display_2);
 
     rp_lock_wait(ctx->status_lock);
     enum frame_buffer_status_t status = ctx->status;
@@ -470,6 +472,5 @@ void draw_screen_get_dims(
     *out_ctx_height = ctx_height;
     *out_win_width_drawable = win_width_drawable;
     *out_win_height_drawable = win_height_drawable;
-    // TODO
-    *out_upscaled = 0;
+    *out_upscaled = SCREEN_UPSCALE_FACTOR > 1 && render_upscaling_filter && render_upscaling_filter_created;
 }

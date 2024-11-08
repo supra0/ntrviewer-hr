@@ -1,27 +1,28 @@
-#ifdef USE_D3D11
-#include <d3d11.h>
-#else
+
 #include "glad/glad.h"
-#endif
 #include "stdbool.h"
 
 #include "../fsr/fsr_main.h"
+
+#ifdef _WIN32
+#include <d3d11.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define REALCUGAN_SCALE (2)
-#ifdef USE_D3D11
-extern int realcugan_create(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);
-extern int realcugan_reset(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);
-extern ID3D11Resource *realcugan_run(int tb, int top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, IDXGIKeyedMutex **mutex, ID3D11ShaderResourceView **srv, bool *dim3, bool *success);
-#else
-extern int realcugan_create();
-extern GLuint realcugan_run(int tb, int top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, GLuint *gl_sem, GLuint *gl_sem_next, bool *dim3, bool *success);
-#endif
-extern void realcugan_next(int tb, int top_bot, int index);
-extern void realcugan_destroy();
+#define REALCUGAN_SCALE SCREEN_UPSCALE_FACTOR
+
+extern int realcugan_d3d11_create(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);
+extern int realcugan_d3d11_reset(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);
+extern ID3D11Resource *realcugan_d3d11_run(int ctx_top_bot, int screen_top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, IDXGIKeyedMutex **mutex, ID3D11ShaderResourceView **srv, bool *dim3, bool *success);
+
+extern int realcugan_ogl_create(void);
+extern GLuint realcugan_ogl_run(int ctx_top_bot, int screen_top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, GLuint *gl_sem, GLuint *gl_sem_next, bool *dim3, bool *success);
+
+extern void realcugan_next(int ctx_top_bot, int screen_top_bot, int index);
+extern void realcugan_destroy(void);
 
 #ifdef __cplusplus
 }

@@ -7,16 +7,11 @@
 #include <clocale>
 #include <mutex>
 #include <memory>
+#include <functional>
 
-#if 0
-#include "cpu.h"
-#include "gpu.h"
-#include "platform.h"
-#else
 #include "ncnn/cpu.h"
 #include "ncnn/gpu.h"
 #include "ncnn/platform.h"
-#endif
 
 #include "realcugan.h"
 #include "lib.h"
@@ -31,10 +26,10 @@ static int realcugan_work_indices[SCREEN_COUNT];
 static std::vector<std::unique_ptr<std::mutex>> realcugan_locks;
 static bool realcugan_support_ext_mem;
 
-#ifdef USE_D3D11
+#ifdef _WIN32
 // Non-owning
-ID3D11Device **d3d_device;
-ID3D11DeviceContext **d3d_context;
+static ID3D11Device **d3d_device;
+static ID3D11DeviceContext **d3d_context;
 #endif
 
 static int realcugan_size()
@@ -42,14 +37,14 @@ static int realcugan_size()
     return realcugan_support_ext_mem ? sizeof(realcugan) / sizeof(realcugan[0]) : 1;
 }
 
-static int realcugan_index(int top_bot, int index, int next)
+static int realcugan_index(int screen_top_bot, int index, int next)
 {
-    index = top_bot * FBI_COUNT + index;
+    index = screen_top_bot * FBI_COUNT + index;
     if (next) {
-        ++realcugan_work_indices[top_bot];
-        realcugan_work_indices[top_bot] %= REALCUGAN_WORK_COUNT;
+        ++realcugan_work_indices[screen_top_bot];
+        realcugan_work_indices[screen_top_bot] %= REALCUGAN_WORK_COUNT;
 
-        realcugan_indices[index] = top_bot * REALCUGAN_WORK_COUNT + realcugan_work_indices[top_bot];
+        realcugan_indices[index] = screen_top_bot * REALCUGAN_WORK_COUNT + realcugan_work_indices[screen_top_bot];
     }
     return realcugan_support_ext_mem ? realcugan_indices[index] : 0;
 }
@@ -94,42 +89,18 @@ static int tta_mode = 0;
 static int scale = REALCUGAN_SCALE;
 static path_t paramfullpath;
 static path_t modelfullpath;
-static int prepadding = 0;
+static int prepadding;
 
-#ifdef USE_D3D11
-static int realcugan_open(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter)
-#else
-static int realcugan_open()
-#endif
-{
-    int use_gpu_count = ncnn::get_gpu_count();
+static int use_gpu_count;
+static int use_gpu_i;
+static ncnn::VulkanDevice *vkdev;
+int supported_ext_context;
 
-    tilesize.clear();
-    tilesize.resize(use_gpu_count, 0);
-
-#ifdef USE_D3D11
-    DXGI_ADAPTER_DESC1 adapter_desc;
-    HRESULT hr;
-    hr = adapter->GetDesc1(&adapter_desc);
-    if (hr) {
-      fprintf(stderr, "GetDesc1 failed: %d\n", (int)hr);
-      return hr;
-    }
-    print_luid((const char *)&adapter_desc.AdapterLuid, "Adapter LUID: ");
-#else
-    GLint gl_num_device_uuids = 0;
-    glGetIntegerv(GL_NUM_DEVICE_UUIDS_EXT, &gl_num_device_uuids);
-    GLubyte gl_device_uuids[gl_num_device_uuids][GL_UUID_SIZE_EXT];
-    for (int i = 0; i < gl_num_device_uuids; ++i) {
-        glGetUnsignedBytei_vEXT(GL_DEVICE_UUID_EXT, i, gl_device_uuids[i]);
-        print_uuid(gl_device_uuids[i], "GL Device %d UUID: ", i);
-    }
-    GLubyte gl_driver_uuid[GL_UUID_SIZE_EXT];
-    glGetUnsignedBytevEXT(GL_DRIVER_UUID_EXT, gl_driver_uuid);
-    print_uuid(gl_driver_uuid, "GL Driver UUID: ");
-#endif
-
-    int supported_ext_context = 0;
+static int realcugan_open(
+    std::function<int(VkPhysicalDeviceIDProperties &, int)> support_ext
+) {
+    supported_ext_context = 0;
+    vkdev = 0;
 
     int default_i = -1;
 
@@ -200,29 +171,10 @@ static int realcugan_open()
             &dev_id_props
         };
         ncnn::vkGetPhysicalDeviceProperties2KHR(vkdev->info.physical_device(), &dev_props2);
-#ifdef USE_D3D11
-        print_luid(dev_id_props.deviceLUID, "Vk Device %d LUID: ", i);
-        if (
-            dev_id_props.deviceLUIDValid &&
-            memcmp(&adapter_desc.AdapterLuid, dev_id_props.deviceLUID, sizeof(dev_id_props.deviceLUID)) == 0
-        ) {
-            fprintf(stderr, "matching gpu device found\n");
+        if (support_ext(dev_id_props, i)) {
             supported_ext_context = 1;
             break;
         }
-#else
-        print_uuid(dev_id_props.deviceUUID, "Vk Device %d UUID: ", i);
-        print_uuid(dev_id_props.driverUUID, "Vk Driver %d UUID: ", i);
-        if (
-            gl_num_device_uuids == 1 &&
-            memcmp(gl_device_uuids[0], dev_id_props.deviceUUID, sizeof(dev_id_props.deviceUUID)) == 0 &&
-            memcmp(gl_driver_uuid, dev_id_props.driverUUID, sizeof(dev_id_props.driverUUID)) == 0
-        ) {
-            fprintf(stderr, "matching gpu device found\n");
-            supported_ext_context = 1;
-            break;
-        }
-#endif
 
         if (default_i < 0) {
             default_i = i;
@@ -242,7 +194,7 @@ static int realcugan_open()
         }
     }
 
-    ncnn::VulkanDevice *vkdev = ncnn::get_gpu_device(i);
+    vkdev = ncnn::get_gpu_device(i);
     if (!vkdev) {
         fprintf(stderr, "no gpu vulkan device found\n");
         return -1;
@@ -252,37 +204,55 @@ static int realcugan_open()
         return -1;
     }
 
+    use_gpu_i = i;
+    return 0;
+}
+
+
+#ifdef _WIN32
+static int realcugan_d3d11_open(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter) {
+    use_gpu_count = ncnn::get_gpu_count();
+
+    tilesize.clear();
+    tilesize.resize(use_gpu_count, 0);
+
+    DXGI_ADAPTER_DESC1 adapter_desc;
+    HRESULT hr;
+    hr = adapter->GetDesc1(&adapter_desc);
+    if (hr) {
+      fprintf(stderr, "GetDesc1 failed: %d\n", (int)hr);
+      return hr;
+    }
+    print_luid((const char *)&adapter_desc.AdapterLuid, "Adapter LUID: ");
+
+    if (realcugan_open([&](VkPhysicalDeviceIDProperties &dev_id_props, int i) {
+        print_luid(dev_id_props.deviceLUID, "Vk Device %d LUID: ", i);
+        if (
+            dev_id_props.deviceLUIDValid &&
+            memcmp(&adapter_desc.AdapterLuid, dev_id_props.deviceLUID, sizeof(dev_id_props.deviceLUID)) == 0
+        ) {
+            fprintf(stderr, "matching gpu device found\n");
+            return 1;
+        }
+        return 0;
+    }))
+        return -1;
+
     // Tested on AMD and NVIDIA for now
     bool supported_gpu_vendor = vkdev->info.vendor_id() == 0x1002 || vkdev->info.vendor_id() == 0x10de;
     supported_gpu_vendor = 1;
-#ifdef USE_D3D11
     realcugan_support_ext_mem = supported_ext_context && supported_gpu_vendor && ncnn::support_VK_KHR_external_memory_capabilities &&
         vkdev->info.support_VK_KHR_external_memory() && vkdev->info.support_VK_KHR_external_memory_win32();
-#else
-    realcugan_support_ext_mem = supported_ext_context && supported_gpu_vendor && ncnn::support_VK_KHR_external_memory_capabilities &&
-        vkdev->info.support_VK_KHR_external_memory() && GLAD_GL_EXT_memory_object &&
-#if _WIN32
-        vkdev->info.support_VK_KHR_external_memory_win32() && GLAD_GL_EXT_memory_object_win32;
-#else
-        vkdev->info.support_VK_KHR_external_memory_fd() && GLAD_GL_EXT_memory_object_fd;
-#endif
-#endif
 
     if (!(vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage() && vkdev->info.support_int8_storage())) {
-#ifdef USE_D3D11
         realcugan_support_ext_mem = false;
-#endif
         fprintf(stderr, "no float16 and int8 support, using slow path\n");
     }
 
     if (realcugan_support_ext_mem) {
-#ifdef USE_D3D11
         fprintf(stderr, "using D3D/Vk interop\n");
         d3d_device = device;
         d3d_context = context;
-#else
-        fprintf(stderr, "using OGL/Vk interop\n");
-#endif
     }
 
     for (int j = 0; j < realcugan_size(); ++j) {
@@ -290,11 +260,7 @@ static int realcugan_open()
             delete realcugan[j];
         }
 
-#ifdef USE_D3D11
-        realcugan[j] = new RealCUGAN(i, d3d_device, d3d_context, tta_mode);
-#else
-        realcugan[j] = new RealCUGAN(i, tta_mode);
-#endif
+        realcugan[j] = new RealCUGAN(use_gpu_i, d3d_device, d3d_context, tta_mode);
 
         realcugan[j]->support_ext_mem = realcugan_support_ext_mem;
         if (realcugan[j]->load(paramfullpath, modelfullpath) != 0) {
@@ -309,7 +275,94 @@ static int realcugan_open()
 
         realcugan[j]->noise = noise;
         realcugan[j]->scale = scale;
-        realcugan[j]->tilesize = tilesize[i];
+        realcugan[j]->tilesize = tilesize[use_gpu_i];
+        realcugan[j]->prepadding = prepadding;
+        realcugan[j]->syncgap = syncgap;
+        realcugan[j]->tiling_linear = false;
+    }
+
+    return 0;
+}
+#endif
+static int realcugan_ogl_open() {
+    use_gpu_count = ncnn::get_gpu_count();
+
+    tilesize.clear();
+    tilesize.resize(use_gpu_count, 0);
+
+    if (GLAD_GL_EXT_memory_object) {
+        GLint gl_num_device_uuids = 0;
+        glGetIntegerv(GL_NUM_DEVICE_UUIDS_EXT, &gl_num_device_uuids);
+        GLubyte gl_device_uuids[gl_num_device_uuids][GL_UUID_SIZE_EXT];
+        for (int i = 0; i < gl_num_device_uuids; ++i) {
+            glGetUnsignedBytei_vEXT(GL_DEVICE_UUID_EXT, i, gl_device_uuids[i]);
+            print_uuid(gl_device_uuids[i], "GL Device %d UUID: ", i);
+        }
+        GLubyte gl_driver_uuid[GL_UUID_SIZE_EXT];
+        glGetUnsignedBytevEXT(GL_DRIVER_UUID_EXT, gl_driver_uuid);
+        print_uuid(gl_driver_uuid, "GL Driver UUID: ");
+
+        if (realcugan_open([&](VkPhysicalDeviceIDProperties &dev_id_props, int i) {
+            print_uuid(dev_id_props.deviceUUID, "Vk Device %d UUID: ", i);
+            print_uuid(dev_id_props.driverUUID, "Vk Driver %d UUID: ", i);
+            if (
+                gl_num_device_uuids == 1 &&
+                memcmp(gl_device_uuids[0], dev_id_props.deviceUUID, sizeof(dev_id_props.deviceUUID)) == 0 &&
+                memcmp(gl_driver_uuid, dev_id_props.driverUUID, sizeof(dev_id_props.driverUUID)) == 0
+            ) {
+                fprintf(stderr, "matching gpu device found\n");
+                return 1;
+            }
+            return 0;
+        }))
+            return -1;
+    } else {
+        if (realcugan_open([&](VkPhysicalDeviceIDProperties &, int) {
+            return 0;
+        }))
+            return -1;
+    }
+
+    // Tested on AMD and NVIDIA for now
+    bool supported_gpu_vendor = vkdev->info.vendor_id() == 0x1002 || vkdev->info.vendor_id() == 0x10de;
+    supported_gpu_vendor = 1;
+    realcugan_support_ext_mem = supported_ext_context && supported_gpu_vendor && ncnn::support_VK_KHR_external_memory_capabilities &&
+        vkdev->info.support_VK_KHR_external_memory() && GLAD_GL_EXT_memory_object &&
+#if _WIN32
+        vkdev->info.support_VK_KHR_external_memory_win32() && GLAD_GL_EXT_memory_object_win32;
+#else
+        vkdev->info.support_VK_KHR_external_memory_fd() && GLAD_GL_EXT_memory_object_fd;
+#endif
+
+    if (!(vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage() && vkdev->info.support_int8_storage())) {
+        fprintf(stderr, "no float16 and int8 support, using slow path\n");
+    }
+
+    if (realcugan_support_ext_mem) {
+        fprintf(stderr, "using OGL/Vk interop\n");
+    }
+
+    for (int j = 0; j < realcugan_size(); ++j) {
+        if (realcugan[j]) {
+            delete realcugan[j];
+        }
+
+        realcugan[j] = new RealCUGAN(use_gpu_i, tta_mode);
+
+        realcugan[j]->support_ext_mem = realcugan_support_ext_mem;
+        if (realcugan[j]->load(paramfullpath, modelfullpath) != 0) {
+            realcugan_destroy();
+            return -1;
+        }
+        if (realcugan_support_ext_mem) {
+            if (!realcugan[j]->support_ext_mem) {
+                realcugan_support_ext_mem = false;
+            }
+        }
+
+        realcugan[j]->noise = noise;
+        realcugan[j]->scale = scale;
+        realcugan[j]->tilesize = tilesize[use_gpu_i];
         realcugan[j]->prepadding = prepadding;
         realcugan[j]->syncgap = syncgap;
         realcugan[j]->tiling_linear = false;
@@ -318,20 +371,15 @@ static int realcugan_open()
     return 0;
 }
 
-#ifdef USE_D3D11
-int realcugan_reset(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter) {
+#ifdef _WIN32
+extern "C"
+int realcugan_d3d11_reset(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter) {
     realcugan_close();
-    return realcugan_open(device, context, adapter);
+    return realcugan_d3d11_open(device, context, adapter);
 }
 #endif
 
-extern "C"
-#ifdef USE_D3D11
-int realcugan_create(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter)
-#else
-int realcugan_create()
-#endif
-{
+static int realcugan_create() {
     if (noise < -1 || noise > 3)
     {
         fprintf(stderr, "invalid noise argument\n");
@@ -431,32 +479,43 @@ int realcugan_create()
 
     ncnn::create_gpu_instance();
 
-#ifdef USE_D3D11
-    if (realcugan_open(device, context, adapter) != 0) {
+    return 0;
+}
+
+#ifdef _WIN32
+extern "C"
+int realcugan_d3d11_create(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter) {
+    if (realcugan_create())
+        return -1;
+
+    if (realcugan_d3d11_open(device, context, adapter) != 0) {
         ncnn::destroy_gpu_instance();
         return -1;
     }
-#else
-    if (realcugan_open() != 0) {
-        ncnn::destroy_gpu_instance();
-        return -1;
-    }
+
+    return 0;
+}
 #endif
+
+extern "C"
+int realcugan_ogl_create() {
+    if (realcugan_create())
+        return -1;
+
+    if (realcugan_ogl_open() != 0) {
+        ncnn::destroy_gpu_instance();
+        return -1;
+    }
 
     return 0;
 }
 
 extern "C"
-#ifdef USE_D3D11
-ID3D11Resource *realcugan_run(int tb, int top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, IDXGIKeyedMutex **mutex, ID3D11ShaderResourceView **srv, bool *dim3, bool *success)
-#else
-GLuint realcugan_run(int tb, int top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, GLuint *gl_sem, GLuint *gl_sem_next, bool *dim3, bool *success)
-#endif
+int realcugan_run(int ctx_top_bot, int locks_index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata)
 {
     ncnn::Mat inimage = ncnn::Mat(w, h, (void*)indata, (size_t)c, c);
     ncnn::Mat outimage = ncnn::Mat(w * REALCUGAN_SCALE, h * REALCUGAN_SCALE, (void*)outdata, (size_t)c, c);
 
-    int locks_index = realcugan_index(top_bot, index, 1);
     if (locks_index + 1 > realcugan_locks.size()) {
         realcugan_locks.resize(locks_index + 1);
     }
@@ -467,41 +526,62 @@ GLuint realcugan_run(int tb, int top_bot, int index, int w, int h, int c, const 
 
     realcugan_locks[locks_index]->lock();
     if (
-        realcugan[locks_index]->process(tb, inimage, outimage)
+        realcugan[locks_index]->process(ctx_top_bot, inimage, outimage)
         != 0
     ) {
         realcugan_locks[locks_index]->unlock();
-
-        *success = false;
-        return 0;
+        return -1;
     }
     realcugan_locks[locks_index]->unlock();
+    return 0;
+}
 
-#ifdef USE_D3D11
-    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[tb];
+#ifdef _WIN32
+extern "C"
+ID3D11Resource *realcugan_d3d11_run(int ctx_top_bot, int screen_top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, IDXGIKeyedMutex **mutex, ID3D11ShaderResourceView **srv, bool *dim3, bool *success)
+{
+    int locks_index = realcugan_index(screen_top_bot, index, 1);
+
+    if (realcugan_run(ctx_top_bot, locks_index, w, h, c, indata, outdata)) {
+        *success = 0;
+        return 0;
+    }
+
+    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[ctx_top_bot];
     *mutex = out->dxgi_mutex;
     *srv = out->d3d_srv;
     *dim3 = out->depth > 1;
     *success = true;
     return out->d3d_resource;
-#else
-    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[tb];
+}
+#endif
+
+extern "C"
+GLuint realcugan_ogl_run(int ctx_top_bot, int screen_top_bot, int index, int w, int h, int c, const unsigned char *indata, unsigned char *outdata, GLuint *gl_sem, GLuint *gl_sem_next, bool *dim3, bool *success)
+{
+    int locks_index = realcugan_index(screen_top_bot, index, 1);
+
+    if (realcugan_run(ctx_top_bot, locks_index, w, h, c, indata, outdata)) {
+        *success = 0;
+        return 0;
+    }
+
+    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[ctx_top_bot];
     GLuint tex = out->gl_texture;
     *gl_sem = out->gl_sem;
     *gl_sem_next = out->gl_sem_next;
     *dim3 = out->depth > 1;
     *success = true;
     return tex;
-#endif
 }
 
-extern "C" void realcugan_next(int tb, int top_bot, int index)
+extern "C" void realcugan_next(int ctx_top_bot, int screen_top_bot, int index)
 {
-    int locks_index = realcugan_index(top_bot, index, 0);
-    if (!realcugan[locks_index] || tb >= realcugan[locks_index]->out_gpu_tex.size()) {
+    int locks_index = realcugan_index(screen_top_bot, index, 0);
+    if (!realcugan[locks_index] || ctx_top_bot >= realcugan[locks_index]->out_gpu_tex.size()) {
         return;
     }
-    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[tb];
+    OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[ctx_top_bot];
     if (!out || !out->first_subseq) {
         return;
     }
@@ -523,7 +603,7 @@ extern "C" void realcugan_destroy()
 {
     realcugan_close();
     ncnn::destroy_gpu_instance();
-#ifdef USE_D3D11
+#ifdef _WIN32
     d3d_context = NULL;
     d3d_device = NULL;
 #endif
