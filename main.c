@@ -86,6 +86,7 @@ bool nk_gui_next;
 bool nk_input_current;
 bool renderer_single_thread;
 bool renderer_evt_sync;
+rp_lock_t upscaling_update_lock;
 
 #include <getopt.h>
 

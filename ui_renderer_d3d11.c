@@ -31,27 +31,11 @@ static ID3D11SamplerState *d3d_ss_point[SCREEN_COUNT];
 static ID3D11SamplerState *d3d_ss_linear[SCREEN_COUNT];
 static struct magpie_t *magpie;
 static int magpie_count;
-static rp_lock_t upscaling_update_lock;
 static rp_lock_t magpie_update_lock;
 static struct magpie_render_t *magpie_render[SCREEN_COUNT][SCREEN_COUNT];
 static int magpie_render_mode[SCREEN_COUNT][SCREEN_COUNT];
 
-enum ui_upscaling_filter_t {
-    UI_UPSCALING_FILTER_NONE = 0,
-    UI_UPSCALING_FILTER_PRE_COUNT,
-    UI_UPSCALING_FILTER_REAL_CUGAN = 0,
-    UI_UPSCALING_FILTER_POST_COUNT,
-    UI_UPSCALING_FILTER_EXTRA_COUNT = UI_UPSCALING_FILTER_PRE_COUNT + UI_UPSCALING_FILTER_POST_COUNT,
-};
-
-#define ui_upscaling_post_index(f) (ui_upscaling_filter_count - UI_UPSCALING_FILTER_POST_COUNT + f)
-
-enum magpie_mode_t {
-    MAGPIE_MODE_REAL_CUGAN_RESERVED,
-    MAGPIE_MODE_START,
-};
-
-void d3d11_upscaling_update(int ctx_top_bot) {
+static void d3d11_upscaling_update(int ctx_top_bot) {
     int i = ctx_top_bot;
 
     rp_lock_wait(upscaling_update_lock);
@@ -79,7 +63,7 @@ void d3d11_upscaling_update(int ctx_top_bot) {
     rp_lock_rel(upscaling_update_lock);
 }
 
-int d3d11_upscaling_init(void) {
+static int d3d11_upscaling_init(void) {
     rp_lock_init(upscaling_update_lock);
     rp_lock_init(magpie_update_lock);
 
@@ -113,7 +97,7 @@ int d3d11_upscaling_init(void) {
 }
 
 static void magpie_cleanup_aux(void);
-void d3d11_upscaling_close(void) {
+static void d3d11_upscaling_close(void) {
     if (magpie) {
         magpie_unload(magpie);
         magpie = 0;

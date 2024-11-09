@@ -12,6 +12,59 @@
 #include "fsr/fsr_main.h"
 #include "realcugan-ncnn-vulkan/lib.h"
 
+static void ogl_upscaling_update(int ctx_top_bot) {
+    int i = ctx_top_bot;
+
+    rp_lock_wait(upscaling_update_lock);
+
+    if (i == SCREEN_TOP) {
+        if (ui_upscaling_selected == ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)) {
+            if (!upscaling_filter_realcugan_created) {
+                int ret = realcugan_ogl_create();
+                if (ret < 0) {
+                    err_log("Real-CUGAN init failed\n");
+                    upscaling_filter_realcugan = 0;
+                    ui_upscaling_selected = UI_UPSCALING_FILTER_NONE;
+                } else {
+                    upscaling_filter_realcugan = 1;
+                    upscaling_filter_realcugan_created = 1;
+                }
+            } else {
+                upscaling_filter_realcugan = 1;
+            }
+        } else {
+            upscaling_filter_realcugan = 0;
+        }
+    }
+
+    rp_lock_rel(upscaling_update_lock);
+}
+
+static int ogl_upscaling_init(void) {
+
+    ui_upscaling_filter_count = UI_UPSCALING_FILTER_EXTRA_COUNT;
+
+    ui_upscaling_filter_options = malloc(ui_upscaling_filter_count * sizeof(*ui_upscaling_filter_options));
+    if (!ui_upscaling_filter_options) {
+        return -1;
+    }
+
+    ui_upscaling_filter_options[UI_UPSCALING_FILTER_NONE] = "None";
+    ui_upscaling_filter_options[ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)] = "Real-CUGAN";
+
+    ui_upscaling_selected = 0;
+
+    return 0;
+}
+
+static void ogl_upscaling_close(void) {
+    if (ui_upscaling_filter_options) {
+        free(ui_upscaling_filter_options);
+        ui_upscaling_filter_options = 0;
+    }
+    ui_upscaling_filter_count = 0;
+}
+
 SDL_Window *ogl_win[SCREEN_COUNT];
 static SDL_Window *csc_win[SCREEN_COUNT];
 static struct nk_context *nk_ctx;
@@ -525,6 +578,9 @@ static int ogl_renderer_init(void) {
     if (ogl_res_init())
         return -1;
 
+    if (ogl_upscaling_init())
+        return -1;
+
     ui_upscaling_filters = 1;
 
     err_log("%s %s\n", is_renderer_ogl() ? "ogl" : is_renderer_gles_angle() ? "angle" : "gles", is_renderer_csc() ? "composition swapchain" : "");
@@ -534,6 +590,8 @@ static int ogl_renderer_init(void) {
 
 static void ogl_renderer_destroy(void) {
     ui_upscaling_filters = 0;
+
+    ogl_upscaling_close();
 
     ogl_res_destroy();
 
@@ -616,7 +674,6 @@ static HANDLE handle_sc[SCREEN_COUNT];
 
 void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared, float bg[4]) {
     int i = ctx_top_bot;
-
     int p = win_shared ? screen_top_bot : i;
 
     if (renderer_single_thread) {
@@ -631,6 +688,8 @@ void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_
             program_running = 0;
         }
     }
+
+    ogl_upscaling_update(i);
 
     if (is_renderer_csc()) {
         sc_fail[p] = 0;

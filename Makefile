@@ -1,8 +1,12 @@
 CC := gcc
 CXX := g++
-CPPFLAGS := -Iinclude -DNDEBUG
-# CFLAGS := -Og -g
-CFLAGS := -flto=auto -Ofast -g -fno-strict-aliasing
+CPPFLAGS := -Iinclude
+ifeq ($(DEBUG),1)
+CFLAGS := -Og -g
+else
+CFLAGS := -flto=auto -Ofast -s -fno-strict-aliasing
+CPPFLAGS += -DNDEBUG
+endif
 CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
