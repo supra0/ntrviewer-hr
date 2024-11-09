@@ -15,7 +15,7 @@ struct com_ptr {
     T *get() const { return ptr; }
     T *operator->() const { return ptr; }
     explicit operator bool() const { return ptr; }
-    void copy_from(T* _ptr) { if (ptr) { ptr->Release(); } ptr = _ptr; }
+    void copy_from(T* _ptr) { if (ptr) { ptr->Release(); } ptr = _ptr; if (ptr) { ptr->AddRef(); } }
     template <typename To> auto try_as() const {
         com_ptr<To> to;
         HRESULT hr = ptr->QueryInterface(IID_PPV_ARGS(to.put()));

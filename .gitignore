@@ -7,6 +7,8 @@ include/ncnn
 include/*.h
 lib
 effects
+cache
+logs
 
 ntrviewer*
 _win32*

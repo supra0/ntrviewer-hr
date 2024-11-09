@@ -239,7 +239,7 @@ static void parse_args(int argc, char **argv)
         ui_renderer = i;
 
         if (is_renderer_csc()) {
-            if (!check_osvi_csc()) {
+            if (opt_flag_no_csc || !check_osvi_csc()) {
                 continue;
             }
         }
@@ -267,10 +267,8 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             return 0;
 
         case WM_SIZE: {
-            if (is_renderer_csc()) {
-                if (resize_top_and_ui) {
-                    rp_lock_wait(comp_lock);
-                }
+            if (resize_top_and_ui) {
+                rp_lock_wait(comp_lock);
             }
             ui_win_width_drawable[i] = NK_MAX(LOWORD(lparam), 1);
             ui_win_height_drawable[i] = NK_MAX(HIWORD(lparam), 1);
@@ -287,10 +285,8 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 ui_nk_width = ui_win_width[i];
                 ui_nk_height = ui_win_height[i];
             }
-            if (is_renderer_csc()) {
-                if (resize_top_and_ui) {
-                    rp_lock_rel(comp_lock);
-                }
+            if (resize_top_and_ui) {
+                rp_lock_rel(comp_lock);
             }
             break;
         }

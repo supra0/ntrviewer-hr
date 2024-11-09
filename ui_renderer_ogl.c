@@ -740,7 +740,7 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
             if (!tex_upscaled) {
                 if (!success) {
                     upscaled = 0;
-                    render_upscaling_filter = 0;
+                    upscaling_filter_realcugan = 0;
                     err_log("upscaling failed; filter disabled\n");
                 } else {
                     glActiveTexture(GL_TEXTURE0);

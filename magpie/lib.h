@@ -8,6 +8,8 @@ extern "C" {
 #include <stdint.h>
 #include <d3d11.h>
 
+void magpie_startup(void);
+
 struct magpie_t;
 struct magpie_t *magpie_load(void);
 void magpie_unload(struct magpie_t *magpie);

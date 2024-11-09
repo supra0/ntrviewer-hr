@@ -12,6 +12,7 @@
 #include "StrUtils.h"
 #include "Win32Utils.h"
 #include "Logger.h"
+#include "CommonSharedConstants.h"
 #include "Utils.h"
 #include "com_ptr.h"
 
@@ -46,6 +47,21 @@ struct magpie_t {
 	std::vector<ScalingMode> scalingModes;
 	std::vector<std::string> namesUtf8;
 };
+
+static bool magpie_startup_done;
+extern "C" void magpie_startup(void) {
+	if (magpie_startup_done)
+		return;
+
+	Logger::Get().Initialize(
+		spdlog::level::info,
+		CommonSharedConstants::LOG_PATH,
+		100000,
+		2
+	);
+
+	magpie_startup_done = 1;
+}
 
 static bool LoadScalingMode(
 	const rapidjson::GenericObject<true, rapidjson::Value>& scalingModeObj,
@@ -340,7 +356,7 @@ static ID3D11Texture2D* RenderBuildEffects(magpie_render_t *render, const std::v
 			break;
 		}
 	}
-	
+
 	if (render->firstDynamicEffectIdx != std::numeric_limits<uint32_t>::max()) {
 		D3D11_BUFFER_DESC bd = {
 			.ByteWidth = 16,	// 只用 4 个字节
@@ -403,7 +419,7 @@ static bool RenderUpdateDynamicConstants(struct magpie_render_t *render) noexcep
 void magpie_render_run(struct magpie_render_t *render) {
 	auto d3dDC = render->backendResources.GetD3DDC();
 	d3dDC->ClearState();
-	
+
 	if (ID3D11Buffer* t = render->dynamicCB.get()) {
 		RenderUpdateDynamicConstants(render);
 		d3dDC->CSSetConstantBuffers(1, 1, &t);

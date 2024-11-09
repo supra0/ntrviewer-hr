@@ -2,7 +2,7 @@ CC := gcc
 CXX := g++
 CPPFLAGS := -Iinclude -DNDEBUG
 # CFLAGS := -Og -g
-CFLAGS := -Ofast -g -fno-strict-aliasing
+CFLAGS := -flto=auto -Ofast -g -fno-strict-aliasing
 CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
@@ -64,7 +64,7 @@ TARGET_OBJ := main.o rp_syn.o ikcp.o $(GL_OBJ) $(JT_OBJ) $(JT_OBJ_S) $(FEC_OBJ) 
 TARGET_DEP := $(TARGET_OBJ:.o=.d)
 
 $(TARGET): $(TARGET_OBJ)
-	$(CXX) $^ -o $@ $(CFLAGS) $(LDLIBS) $(LDFLAGS)
+	$(CXX) $^ -o $@ $(CFLAGS) $(LDLIBS) $(LDFLAGS) -w
 
 CC_JT = $(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Ijpeg_turbo -Ijpeg_turbo/include -Wno-stringop-overflow -Wno-unused-parameter -Wno-sign-compare
 

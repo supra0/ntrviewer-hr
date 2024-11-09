@@ -34,6 +34,7 @@ struct rp_buffer_ctx_t {
     ID3D11Texture2D *d3d_tex[SCREEN_COUNT];
     ID3D11ShaderResourceView *d3d_srv[SCREEN_COUNT];
     IDXGIKeyedMutex *d3d_mutex_upscaled[SCREEN_COUNT]; // Non-owning
+    ID3D11Resource *d3d_res_upscaled[SCREEN_COUNT]; // Non-owning
     ID3D11ShaderResourceView *d3d_srv_upscaled[SCREEN_COUNT]; // Non-owning
     ID3D11Texture2D *d3d_tex_upscaled_prev[SCREEN_COUNT];
     ID3D11ShaderResourceView *d3d_srv_upscaled_prev[SCREEN_COUNT];
@@ -62,6 +63,6 @@ struct rp_buffer_ctx_t {
 };
 extern struct rp_buffer_ctx_t rp_buffer_ctx[SCREEN_COUNT];
 extern event_t decode_updated_event;
-extern bool render_upscaling_filter;
-extern bool render_upscaling_filter_created;
+extern atomic_bool upscaling_filter_realcugan;
+extern atomic_bool upscaling_filter_realcugan_created;
 #endif

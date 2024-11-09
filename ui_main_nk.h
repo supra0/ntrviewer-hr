@@ -16,6 +16,10 @@ extern enum nk_nav_t nk_nav_cmd;
 extern atomic_bool ui_hide_nk_windows;
 extern bool ui_upscaling_filters;
 
+extern int ui_upscaling_selected;
+extern const char **ui_upscaling_filter_options;
+extern int ui_upscaling_filter_count;
+
 void ui_main_nk(void);
 void nk_backend_font_init(void);
 

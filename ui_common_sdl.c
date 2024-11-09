@@ -472,5 +472,5 @@ void draw_screen_get_dims(
     *out_ctx_height = ctx_height;
     *out_win_width_drawable = win_width_drawable;
     *out_win_height_drawable = win_height_drawable;
-    *out_upscaled = SCREEN_UPSCALE_FACTOR > 1 && render_upscaling_filter && render_upscaling_filter_created;
+    *out_upscaled = SCREEN_UPSCALE_FACTOR > 1 && upscaling_filter_realcugan && upscaling_filter_realcugan_created;
 }

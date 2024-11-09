@@ -90,7 +90,7 @@ bool EffectDrawer::Initialize(
 		inputSize = { (LONG)inputDesc.Width, (LONG)inputDesc.Height };
 	}
 
-	static mu::Parser exprParser;
+	mu::Parser exprParser;
 	exprParser.DefineConst("INPUT_WIDTH", inputSize.cx);
 	exprParser.DefineConst("INPUT_HEIGHT", inputSize.cy);
 
