@@ -1,3 +1,5 @@
+#ifndef REALCUGAN_LIB_H
+#define REALCUGAN_LIB_H
 
 #include "glad/glad.h"
 #include "stdbool.h"
@@ -26,4 +28,6 @@ extern void realcugan_destroy(void);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

@@ -6,6 +6,7 @@
 include/ncnn
 include/*.h
 lib
+effects
 
 ntrviewer*
 _win32*

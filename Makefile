@@ -7,7 +7,7 @@ CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
 ifeq ($(OS),Windows_NT)
-	LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi
+	LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi -lpathcch
 	TARGET := ntrviewer.exe
 	NASM := -DWIN64 -fwin64
 else

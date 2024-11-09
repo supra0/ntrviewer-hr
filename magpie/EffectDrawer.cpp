@@ -79,7 +79,7 @@ bool EffectDrawer::Initialize(
 	DeviceResources& deviceResources,
 	BackendDescriptorStore& descriptorStore,
 	ID3D11Texture2D** inOutTexture,
-	const RECT& wndRect
+	const SIZE& outSize
 ) noexcept {
 	_d3dDC = deviceResources.GetD3DDC();
 
@@ -94,7 +94,7 @@ bool EffectDrawer::Initialize(
 	exprParser.DefineConst("INPUT_WIDTH", inputSize.cx);
 	exprParser.DefineConst("INPUT_HEIGHT", inputSize.cy);
 
-	const SIZE scalingWndSize = Win32Utils::GetSizeOfRect(wndRect);
+	const SIZE scalingWndSize = outSize;
 	const SIZE outputSize = CalcOutputSize(desc.GetOutputSizeExpr(), option, scalingWndSize, inputSize, exprParser);
 	if (outputSize.cx <= 0 || outputSize.cy <= 0) {
 		Logger::Get().Error("非法的输出尺寸");

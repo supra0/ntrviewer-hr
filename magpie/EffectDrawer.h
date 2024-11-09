@@ -24,7 +24,7 @@ public:
 		DeviceResources& deviceResources,
 		BackendDescriptorStore& descriptorStore,
 		ID3D11Texture2D** inOutTexture,
-		const RECT& wndRect
+		const SIZE& outSize
 	) noexcept;
 
 	void Draw(EffectsProfiler& profiler) const noexcept;

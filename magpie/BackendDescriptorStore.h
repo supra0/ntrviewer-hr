@@ -11,7 +11,7 @@ public:
 	BackendDescriptorStore(const BackendDescriptorStore&) = delete;
 	BackendDescriptorStore(BackendDescriptorStore&&) = default;
 
-	void Initialize(ID3D11Device5* d3dDevice) noexcept {
+	void Initialize(ID3D11Device* d3dDevice) noexcept {
 		_d3dDevice = d3dDevice;
 	}
 
@@ -26,7 +26,7 @@ public:
 	) noexcept;
 
 private:
-	ID3D11Device5* _d3dDevice = nullptr;
+	ID3D11Device* _d3dDevice = nullptr;
 
 	std::unordered_map<ID3D11Texture2D*, com_ptr<ID3D11ShaderResourceView>> _srvMap;
 	std::unordered_map<void*, com_ptr<ID3D11UnorderedAccessView>> _uavMap;

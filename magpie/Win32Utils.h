@@ -17,6 +17,14 @@ struct Win32Utils {
 
 	static bool GetWindowFrameRect(HWND hWnd, RECT& rect) noexcept;
 
+	static bool ReadFile(const wchar_t* fileName, std::vector<uint8_t>& result) noexcept;
+
+	static bool ReadTextFile(const wchar_t* fileName, std::string& result) noexcept;
+
+	static bool WriteFile(const wchar_t* fileName, const void* buffer, size_t bufferSize) noexcept;
+
+	static bool WriteTextFile(const wchar_t* fileName, std::string_view text) noexcept;
+
 	static bool FileExists(const wchar_t* fileName) noexcept {
 		DWORD attrs = GetFileAttributes(fileName);
 		// 排除文件夹
@@ -125,6 +133,8 @@ struct Win32Utils {
 	static bool OpenFolderAndSelectFile(const wchar_t* fileName) noexcept;
 
 	static const std::wstring& GetExePath() noexcept;
+
+	static HRESULT CreateDirectoryDeepNoThrow(PCWSTR path) noexcept;
 };
 
 constexpr bool operator==(const SIZE& l, const SIZE& r) noexcept {
