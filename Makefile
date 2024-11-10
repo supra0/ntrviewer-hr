@@ -1,6 +1,6 @@
 CC := gcc
 CXX := g++
-CPPFLAGS := -Iinclude
+CPPFLAGS := -Iinclude -DPL_STATIC
 ifeq ($(DEBUG),1)
 CFLAGS := -Og -g
 else
@@ -11,14 +11,15 @@ CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
 ifeq ($(OS),Windows_NT)
-	LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi -lpathcch
-	TARGET := ntrviewer.exe
-	NASM := -DWIN64 -fwin64
+LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi -lpathcch
+TARGET := ntrviewer.exe
+NASM := -DWIN64 -fwin64
 else
-	LDLIBS := -static-libgcc -static-libstdc++ -Llib -Wl,-Bstatic -lSDL2
-	TARGET := ntrviewer
-	NASM := -DELF -felf64
+LDLIBS := -static-libgcc -static-libstdc++ -Llib -Wl,-Bstatic -lSDL2
+TARGET := ntrviewer
+NASM := -DELF -felf64
 endif
+LDLIBS += -lplacebo -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools
 
 GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o
 ifeq ($(OS),Windows_NT)
@@ -27,8 +28,8 @@ MAGP_OBJ := $(MAGP_SRC:.cpp=.o)
 MUPR_SRC := $(wildcard muparser/*.cpp)
 MUPR_OBJ := $(MUPR_SRC:.cpp=.o)
 GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o $(MAGP_OBJ) $(MUPR_OBJ)
+LDLIBS += -lshlwapi
 endif
-LDLIBS += -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools
 
 # LDFLAGS := -s
 
@@ -139,7 +140,7 @@ nuklear/stb_%.o: nuklear/stb_%.c
 	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS)
 
 %.o: %.c
-	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -D_GNU_SOURCE
+	$(CC) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -D_GNU_SOURCE -Imagpie
 
 -include $(TARGET_DEP)
 

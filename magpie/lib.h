@@ -11,11 +11,11 @@ extern "C" {
 void magpie_startup(void);
 
 struct magpie_t;
-struct magpie_t *magpie_load(void);
+struct magpie_t *magpie_load(const char *filename);
 void magpie_unload(struct magpie_t *magpie);
 
 size_t magpie_mode_count(struct magpie_t *magpie);
-const char *magpie_mode_name(struct magpie_t *magpie, size_t index);
+const char *magpie_mode_name(struct magpie_t *magpie, size_t index, const char *prefix);
 
 struct magpie_render_t;
 struct magpie_render_t *magpie_render_init(struct magpie_t *magpie, size_t index, ID3D11Device* dev, ID3D11DeviceContext* ctx, ID3D11Texture2D* tex, const SIZE* outSize);

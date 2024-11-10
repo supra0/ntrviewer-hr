@@ -24,8 +24,6 @@ using namespace Magpie::Core;
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/document.h>
 
-static const std::wstring modes_import_filename = L"ScalingModes.json";
-
 struct EffectInfo {
 	std::string name;
 	std::vector<std::string> passNames;
@@ -167,9 +165,9 @@ static std::vector<ScalingMode> ImportScalingModes(const rapidjson::GenericObjec
 	return scalingModes;
 }
 
-struct magpie_t *magpie_load(void) {
+struct magpie_t *magpie_load(const char *filename) {
 	std::string json;
-	if (!Win32Utils::ReadTextFile(modes_import_filename.c_str(), json)) {
+	if (!Win32Utils::ReadTextFile(StrUtils::UTF8ToUTF16(std::string(filename)).c_str(), json)) {
 		return 0;
 	}
 
@@ -201,7 +199,7 @@ size_t magpie_mode_count(struct magpie_t *magpie) {
 	return magpie->scalingModes.size();
 }
 
-const char *magpie_mode_name(struct magpie_t *magpie, size_t index) {
+const char *magpie_mode_name(struct magpie_t *magpie, size_t index, const char *prefix) {
 	if (index >= magpie_mode_count(magpie)) {
 		return 0;
 	}
@@ -211,7 +209,7 @@ const char *magpie_mode_name(struct magpie_t *magpie, size_t index) {
 	}
 
 	if (magpie->namesUtf8[index].empty()) {
-		magpie->namesUtf8[index] = StrUtils::UTF16ToUTF8(magpie->scalingModes[index].name);
+		magpie->namesUtf8[index] = prefix + StrUtils::UTF16ToUTF8(magpie->scalingModes[index].name);
 	}
 
 	return magpie->namesUtf8[index].c_str();

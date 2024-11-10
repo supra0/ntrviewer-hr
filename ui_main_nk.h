@@ -27,4 +27,9 @@ struct nk_font_atlas;
 void nk_font_stash_begin(struct nk_font_atlas **atlas);
 void nk_font_stash_end(void);
 
+#define NK_UPSCALE_TYPE_TEXT_NONE "  "
+#define NK_UPSCALE_TYPE_TEXT_MAGPIE "[color=\"magpie\"]M[/color] "
+#define NK_UPSCALE_TYPE_TEXT_PLACEBO "[color=\"placebo\"]P[/color] "
+#define NK_UPSCALE_TYPE_TEXT_REAL "[color=\"real\"]R[/color] "
+
 #endif

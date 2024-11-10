@@ -7,6 +7,7 @@
 enum nk_nav_t nk_nav_cmd;
 
 #include "style.h"
+#include "web_colors.h"
 
 #define UI_MSG_BUF_LEN_MAX (256)
 
@@ -68,6 +69,10 @@ void nk_backend_font_init(void)
     // set_style(ui_nk_ctx, THEME_RED);
     // set_style(ui_nk_ctx, THEME_BLUE);
     set_style(ui_nk_ctx, THEME_DARK);
+
+    web_colors_init(ui_nk_ctx);
+    web_colors_add(ui_nk_ctx);
+
     nk_style_current = ui_nk_ctx->style;
 }
 
@@ -537,6 +542,7 @@ void ui_main_nk(void)
         }
 
         if (ui_upscaling_filters) {
+            nk_draw_push_color_inline(ctx, NK_COLOR_INLINE_TAG);
             nk_layout_row_dynamic(ctx, 30, 2);
             nk_label(ctx, "Upscaling Filter", NK_TEXT_CENTERED);
             selected = ui_upscaling_selected;
@@ -547,6 +553,7 @@ void ui_main_nk(void)
                 set_nav_combobox_prev(NK_FOCUS_UPSCALING_FILTER);
                 ui_upscaling_selected = selected;
             }
+            nk_draw_pop_color_inline(ctx);
         }
 
         nk_layout_row_dynamic(ctx, 30, 5);

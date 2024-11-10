@@ -25,7 +25,7 @@ int opt_testing_no_ext_mem, opt_testing_no_shared_sem, opt_testing_no_fp16;
 static RealCUGAN* realcugan[SCREEN_COUNT * REALCUGAN_WORK_COUNT];
 static int realcugan_indices[SCREEN_COUNT * FBI_COUNT];
 static int realcugan_work_indices[SCREEN_COUNT];
-static std::vector<std::unique_ptr<std::mutex>> realcugan_locks;
+static std::array<std::mutex, sizeof(realcugan) / sizeof(realcugan[0])> realcugan_locks;
 static bool realcugan_support_ext_mem;
 
 #ifdef _WIN32
@@ -532,23 +532,19 @@ int realcugan_run(int ctx_top_bot, int locks_index, int w, int h, int c, const u
     ncnn::Mat inimage = ncnn::Mat(w, h, (void*)indata, (size_t)c, c);
     ncnn::Mat outimage = ncnn::Mat(w * REALCUGAN_SCALE, h * REALCUGAN_SCALE, (void*)outdata, (size_t)c, c);
 
-    if (locks_index + 1 > realcugan_locks.size()) {
-        realcugan_locks.resize(locks_index + 1);
+    if (locks_index >= realcugan_locks.size()) {
+        return -2;
     }
 
-    if (!realcugan_locks[locks_index]) {
-        realcugan_locks[locks_index] = std::make_unique<std::mutex>();
-    }
-
-    realcugan_locks[locks_index]->lock();
+    realcugan_locks[locks_index].lock();
     if (
         realcugan[locks_index]->process(ctx_top_bot, inimage, outimage)
         != 0
     ) {
-        realcugan_locks[locks_index]->unlock();
+        realcugan_locks[locks_index].unlock();
         return -1;
     }
-    realcugan_locks[locks_index]->unlock();
+    realcugan_locks[locks_index].unlock();
     return 0;
 }
 
@@ -603,7 +599,7 @@ extern "C" void realcugan_next(int ctx_top_bot, int screen_top_bot, int index)
     }
 
     if (out->need_wait) {
-        realcugan_locks[locks_index]->lock();
+        realcugan_locks[locks_index].lock();
         if (out->need_wait) {
             VkResult ret = ncnn::vkWaitForFences(realcugan[locks_index]->vkdev->vkdevice(), 1, &out->fence, VK_TRUE, (uint64_t)-1);
             if (ret != VK_SUCCESS) {
@@ -611,7 +607,7 @@ extern "C" void realcugan_next(int ctx_top_bot, int screen_top_bot, int index)
             }
             out->need_wait = false;
         }
-        realcugan_locks[locks_index]->unlock();
+        realcugan_locks[locks_index].unlock();
     }
 }
 

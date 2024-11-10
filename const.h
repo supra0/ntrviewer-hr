@@ -198,19 +198,4 @@ typedef int64_t s64;
 
 #define SCREEN_UPSCALE_FACTOR 2
 
-enum ui_upscaling_filter_t {
-    UI_UPSCALING_FILTER_NONE = 0,
-    UI_UPSCALING_FILTER_PRE_COUNT,
-    UI_UPSCALING_FILTER_REAL_CUGAN = 0,
-    UI_UPSCALING_FILTER_POST_COUNT,
-    UI_UPSCALING_FILTER_EXTRA_COUNT = UI_UPSCALING_FILTER_PRE_COUNT + UI_UPSCALING_FILTER_POST_COUNT,
-};
-
-#define ui_upscaling_post_index(f) (ui_upscaling_filter_count - UI_UPSCALING_FILTER_POST_COUNT + f)
-
-enum magpie_mode_t {
-    MAGPIE_MODE_REAL_CUGAN_RESERVED,
-    MAGPIE_MODE_START,
-};
-
 #endif

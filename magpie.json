@@ -1,22 +1,6 @@
 {
     "scalingModes": [
         {
-            "name": "(Real-CUGAN Reserved)",
-            "effects": [
-                {
-                    "name": "FSR\\FSR_EASU",
-                    "scalingType": 1,
-                    "scale": {
-                        "x": 1.0,
-                        "y": 1.0
-                    }
-                },
-                {
-                    "name": "FSR\\FSR_RCAS"
-                }
-            ]
-        },
-        {
             "name": "Anime4K",
             "effects": [
                 {
@@ -27,7 +11,7 @@
                 },
                 {
                     "name": "Jinc",
-                    "scalingType": 1,
+                    "scalingType": 3,
                     "scale": {
                         "x": 1.0,
                         "y": 1.0
@@ -36,7 +20,7 @@
             ]
         },
         {
-            "name": "Anime4K (3D)",
+            "name": "Anime4K + 3D AA",
             "effects": [
                 {
                     "name": "Anime4K\\Anime4K_Restore_Soft_UL"
@@ -49,7 +33,7 @@
                 },
                 {
                     "name": "Jinc",
-                    "scalingType": 1,
+                    "scalingType": 3,
                     "scale": {
                         "x": 1.0,
                         "y": 1.0

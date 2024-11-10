@@ -11,59 +11,7 @@
 #include "ui_main_nk.h"
 #include "fsr/fsr_main.h"
 #include "realcugan-ncnn-vulkan/lib.h"
-
-static void ogl_upscaling_update(int ctx_top_bot) {
-    int i = ctx_top_bot;
-
-    rp_lock_wait(upscaling_update_lock);
-
-    if (i == SCREEN_TOP) {
-        if (ui_upscaling_selected == ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)) {
-            if (!upscaling_filter_realcugan_created) {
-                int ret = realcugan_ogl_create();
-                if (ret < 0) {
-                    err_log("Real-CUGAN init failed\n");
-                    upscaling_filter_realcugan = 0;
-                    ui_upscaling_selected = UI_UPSCALING_FILTER_NONE;
-                } else {
-                    upscaling_filter_realcugan = 1;
-                    upscaling_filter_realcugan_created = 1;
-                }
-            } else {
-                upscaling_filter_realcugan = 1;
-            }
-        } else {
-            upscaling_filter_realcugan = 0;
-        }
-    }
-
-    rp_lock_rel(upscaling_update_lock);
-}
-
-static int ogl_upscaling_init(void) {
-
-    ui_upscaling_filter_count = UI_UPSCALING_FILTER_EXTRA_COUNT;
-
-    ui_upscaling_filter_options = malloc(ui_upscaling_filter_count * sizeof(*ui_upscaling_filter_options));
-    if (!ui_upscaling_filter_options) {
-        return -1;
-    }
-
-    ui_upscaling_filter_options[UI_UPSCALING_FILTER_NONE] = "None";
-    ui_upscaling_filter_options[ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)] = "Real-CUGAN";
-
-    ui_upscaling_selected = 0;
-
-    return 0;
-}
-
-static void ogl_upscaling_close(void) {
-    if (ui_upscaling_filter_options) {
-        free(ui_upscaling_filter_options);
-        ui_upscaling_filter_options = 0;
-    }
-    ui_upscaling_filter_count = 0;
-}
+#include <libplacebo/opengl.h>
 
 SDL_Window *ogl_win[SCREEN_COUNT];
 static SDL_Window *csc_win[SCREEN_COUNT];
@@ -473,6 +421,116 @@ static void ogl_res_destroy(void)
             }
         }
     }
+}
+
+enum {
+    UPSCALING_DEFAULT_0_NONE = 0,
+    UPSCALING_DEFAULT_0_COUNT,
+
+    UPSCALING_DEFAULT_1_REAL_CUGAN = 0,
+    UPSCALING_DEFAULT_1_REAL_CUGAN_FSR,
+    UPSCALING_DEFAULT_1_COUNT,
+
+    UPSCALING_DEFAULT_COUNT = UPSCALING_DEFAULT_0_COUNT + UPSCALING_DEFAULT_1_COUNT,
+};
+
+static int upscaling_0_count;
+static int upscaling_1_count;
+static bool upscaling_fsr;
+
+#define UPSCALING_DEFAULT_0_UI_INDEX(mode) (mode)
+#define UPSCALING_0_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + mode)
+#define UPSCALING_DEFAULT_1_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + mode)
+#define UPSCALING_1_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + UPSCALING_DEFAULT_1_COUNT + mode)
+
+#define UPSCALING_0_MODE(ui_index) (ui_index - UPSCALING_DEFAULT_0_COUNT)
+#define UPSCALING_1_MODE(ui_index) (ui_index - (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + UPSCALING_DEFAULT_1_COUNT))
+
+#define IS_UPSCALING_0(ui_index) (UPSCALING_0_MODE(ui_index) >= 0 && UPSCALING_0_MODE(ui_index) < upscaling_0_count)
+#define IS_UPSCALING_1(ui_index) (UPSCALING_1_MODE(ui_index) >= 0 && UPSCALING_1_MODE(ui_index) < upscaling_1_count)
+
+static pl_opengl pl_ogl_dev[SCREEN_COUNT];
+static pl_log pl_log_dev;
+
+static void ogl_upscaling_update(int ctx_top_bot) {
+    int i = ctx_top_bot;
+
+    rp_lock_wait(upscaling_update_lock);
+
+    if (i == SCREEN_TOP) {
+        int upscaling_selected = ui_upscaling_selected;
+        if (
+            upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN) ||
+            upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR) ||
+            IS_UPSCALING_1(upscaling_selected)
+        ) {
+            if (!upscaling_filter_realcugan_created) {
+                int ret = realcugan_ogl_create();
+                if (ret < 0) {
+                    err_log("Real-CUGAN init failed\n");
+                    upscaling_filter_realcugan = 0;
+                    ui_upscaling_selected = UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE);
+                } else {
+                    upscaling_filter_realcugan = 1;
+                    upscaling_filter_realcugan_created = 1;
+                }
+            } else {
+                upscaling_filter_realcugan = 1;
+            }
+
+            upscaling_fsr = upscaling_filter_realcugan && upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR);
+        } else {
+            upscaling_filter_realcugan = 0;
+        }
+    }
+
+    rp_lock_rel(upscaling_update_lock);
+}
+
+static int ogl_upscaling_init(void) {
+    ui_upscaling_filter_count = UPSCALING_DEFAULT_COUNT;
+
+    pl_log_dev = pl_log_create(PL_API_VER, pl_log_params(
+        .log_cb = pl_log_color,
+        .log_level = PL_LOG_INFO,
+    ));
+    if (pl_log_dev) {
+        for (int j = 0; j < SCREEN_COUNT; ++j) {
+            SDL_GL_MakeCurrent(ogl_win[j], gl_context[j]);
+            pl_ogl_dev[j] = pl_opengl_create(pl_log_dev, pl_opengl_params(
+                .get_proc_addr = (pl_voidfunc_t (*)(const char *))SDL_GL_GetProcAddress,
+            ));
+        }
+        SDL_GL_MakeCurrent(NULL, NULL);
+    }
+
+    ui_upscaling_filter_options = malloc(ui_upscaling_filter_count * sizeof(*ui_upscaling_filter_options));
+    if (!ui_upscaling_filter_options) {
+        return -1;
+    }
+
+    ui_upscaling_filter_options[UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE)] = NK_UPSCALE_TYPE_TEXT_NONE NK_UPSCALE_TYPE_TEXT_NONE "None";
+    ui_upscaling_filter_options[UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN)] = NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_NONE "Real-CUGAN";
+    ui_upscaling_filter_options[UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR)] = NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_NONE "Real-CUGAN + FSR";
+
+    ui_upscaling_selected = 0;
+
+    return 0;
+}
+
+static void ogl_upscaling_close(void) {
+    for (int j = 0; j < SCREEN_COUNT; ++j) {
+        SDL_GL_MakeCurrent(ogl_win[j], gl_context[j]);
+        pl_opengl_destroy(&pl_ogl_dev[j]);
+    }
+    SDL_GL_MakeCurrent(NULL, NULL);
+    pl_log_destroy(&pl_log_dev);
+
+    if (ui_upscaling_filter_options) {
+        free(ui_upscaling_filter_options);
+        ui_upscaling_filter_options = 0;
+    }
+    ui_upscaling_filter_count = 0;
 }
 
 static int ogl_renderer_init(void) {
@@ -895,7 +953,7 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glViewport(0, 0, win_width_drawable, win_height_drawable);
 
-    nk_bool use_fsr = ctx_height > height * scale && ctx_width > width * scale;
+    nk_bool use_fsr = upscaling_fsr;
 #ifdef _WIN32
     nk_bool can_use_fsr = !is_renderer_gles_angle();
 #else
@@ -909,6 +967,8 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
 
     if (use_fsr) {
         if (!can_use_fsr) {
+            err_log("Compute shader not available (needed for FSR)\n");
+            upscaling_selected = ui_upscaling_selected = UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN);
             use_fsr = 0;
         }
     }

@@ -31,9 +31,35 @@ static ID3D11SamplerState *d3d_ss_point[SCREEN_COUNT];
 static ID3D11SamplerState *d3d_ss_linear[SCREEN_COUNT];
 static struct magpie_t *magpie;
 static int magpie_count;
+static struct magpie_t *magpie_real_cugan;
+static int magpie_real_cugan_count;
 static rp_lock_t magpie_update_lock;
 static struct magpie_render_t *magpie_render[SCREEN_COUNT][SCREEN_COUNT];
 static int magpie_render_mode[SCREEN_COUNT][SCREEN_COUNT];
+
+enum {
+    UPSCALING_DEFAULT_0_NONE = 0,
+    UPSCALING_DEFAULT_0_COUNT,
+
+    UPSCALING_DEFAULT_1_REAL_CUGAN = 0,
+    UPSCALING_DEFAULT_1_COUNT,
+
+    UPSCALING_DEFAULT_COUNT = UPSCALING_DEFAULT_0_COUNT + UPSCALING_DEFAULT_1_COUNT,
+};
+
+static int upscaling_0_count;
+static int upscaling_1_count;
+
+#define UPSCALING_DEFAULT_0_UI_INDEX(mode) (mode)
+#define UPSCALING_0_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + mode)
+#define UPSCALING_DEFAULT_1_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + mode)
+#define UPSCALING_1_UI_INDEX(mode) (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + UPSCALING_DEFAULT_1_COUNT + mode)
+
+#define UPSCALING_0_MODE(ui_index) (ui_index - UPSCALING_DEFAULT_0_COUNT)
+#define UPSCALING_1_MODE(ui_index) (ui_index - (UPSCALING_DEFAULT_0_COUNT + upscaling_0_count + UPSCALING_DEFAULT_1_COUNT))
+
+#define IS_UPSCALING_0(ui_index) (UPSCALING_0_MODE(ui_index) >= 0 && UPSCALING_0_MODE(ui_index) < upscaling_0_count)
+#define IS_UPSCALING_1(ui_index) (UPSCALING_1_MODE(ui_index) >= 0 && UPSCALING_1_MODE(ui_index) < upscaling_1_count)
 
 static void d3d11_upscaling_update(int ctx_top_bot) {
     int i = ctx_top_bot;
@@ -41,13 +67,17 @@ static void d3d11_upscaling_update(int ctx_top_bot) {
     rp_lock_wait(upscaling_update_lock);
 
     if (i == SCREEN_TOP) {
-        if (ui_upscaling_selected == ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)) {
+        int upscaling_selected = ui_upscaling_selected;
+        if (
+            upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN) ||
+            IS_UPSCALING_1(upscaling_selected)
+        ) {
             if (!upscaling_filter_realcugan_created) {
                 int ret = realcugan_d3d11_create(d3d11device, d3d11device_context, dxgi_adapter);
                 if (ret < 0) {
                     err_log("Real-CUGAN init failed\n");
                     upscaling_filter_realcugan = 0;
-                    ui_upscaling_selected = UI_UPSCALING_FILTER_NONE;
+                    ui_upscaling_selected = UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE);
                 } else {
                     upscaling_filter_realcugan = 1;
                     upscaling_filter_realcugan_created = 1;
@@ -67,16 +97,20 @@ static int d3d11_upscaling_init(void) {
     rp_lock_init(upscaling_update_lock);
     rp_lock_init(magpie_update_lock);
 
-    ui_upscaling_filter_count = UI_UPSCALING_FILTER_EXTRA_COUNT;
+    ui_upscaling_filter_count = UPSCALING_DEFAULT_COUNT;
 
     magpie_startup();
 
-    magpie = magpie_load();
+    magpie = magpie_load("magpie.json");
     if (magpie) {
-        magpie_count = magpie_mode_count(magpie);
-        if (magpie_count >= MAGPIE_MODE_START) {
-            ui_upscaling_filter_count += magpie_count - MAGPIE_MODE_START;
-        }
+        upscaling_0_count = magpie_count = magpie_mode_count(magpie);
+        ui_upscaling_filter_count += magpie_count;
+    }
+
+    magpie_real_cugan = magpie_load("magpie-real-cugan.json");
+    if (magpie_real_cugan) {
+        upscaling_1_count = magpie_real_cugan_count = magpie_mode_count(magpie_real_cugan);
+        ui_upscaling_filter_count += magpie_real_cugan_count;
     }
 
     ui_upscaling_filter_options = malloc(ui_upscaling_filter_count * sizeof(*ui_upscaling_filter_options));
@@ -84,11 +118,15 @@ static int d3d11_upscaling_init(void) {
         return -1;
     }
 
-    ui_upscaling_filter_options[UI_UPSCALING_FILTER_NONE] = "None";
-    ui_upscaling_filter_options[ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)] = "Real-CUGAN";
+    ui_upscaling_filter_options[UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE)] = NK_UPSCALE_TYPE_TEXT_NONE NK_UPSCALE_TYPE_TEXT_NONE "None";
+    ui_upscaling_filter_options[UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN)] = NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_NONE "Real-CUGAN";
 
-    for (int i = 0; i < magpie_count - MAGPIE_MODE_START; ++i) {
-        ui_upscaling_filter_options[UI_UPSCALING_FILTER_PRE_COUNT + i] = magpie_mode_name(magpie, i + MAGPIE_MODE_START);
+    for (int i = 0; i < magpie_count; ++i) {
+        ui_upscaling_filter_options[UPSCALING_0_UI_INDEX(i)] = magpie_mode_name(magpie, i, NK_UPSCALE_TYPE_TEXT_NONE NK_UPSCALE_TYPE_TEXT_MAGPIE);
+    }
+
+    for (int i = 0; i < magpie_real_cugan_count; ++i) {
+        ui_upscaling_filter_options[UPSCALING_1_UI_INDEX(i)] = magpie_mode_name(magpie_real_cugan, i, NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_MAGPIE);
     }
 
     ui_upscaling_selected = 0;
@@ -103,6 +141,11 @@ static void d3d11_upscaling_close(void) {
         magpie = 0;
     }
     magpie_count = 0;
+    if (magpie_real_cugan) {
+        magpie_unload(magpie_real_cugan);
+        magpie_real_cugan = 0;
+    }
+    magpie_real_cugan_count = 0;
 
     magpie_cleanup_aux();
 
@@ -537,21 +580,28 @@ static void magpie_cleanup_aux(void) {
     }
 }
 
-static void magpie_upscaling_update(bool upscaled, int selected, int ctx_top_bot, int screen_top_bot, int in_width, int in_height, int out_width, int out_height) {
+static int magpie_upscaling_update(bool upscaled, int selected, int ctx_top_bot, int screen_top_bot, int in_width, int in_height, int out_width, int out_height) {
     int i = ctx_top_bot;
 
     int render_mode = -1;
     bool reset_mode = 0;
-    if (selected == ui_upscaling_post_index(UI_UPSCALING_FILTER_REAL_CUGAN)) {
-        render_mode = MAGPIE_MODE_REAL_CUGAN_RESERVED;
+    struct magpie_t *magpie_base = 0;
+    if (IS_UPSCALING_0(selected)) {
+        render_mode = UPSCALING_0_MODE(selected);
+        if (!upscaled)
+            magpie_base = magpie;
+        else
+            reset_mode = 1;
+    } else if (IS_UPSCALING_1(selected)) {
+        render_mode = UPSCALING_1_MODE(selected);
         in_width *= SCREEN_UPSCALE_FACTOR;
         in_height *= SCREEN_UPSCALE_FACTOR;
-        if (!upscaled)
-            reset_mode = 1;
-    } else if (selected >= UI_UPSCALING_FILTER_PRE_COUNT && selected < ui_upscaling_post_index(0)) {
-        render_mode = MAGPIE_MODE_START + (selected - UI_UPSCALING_FILTER_PRE_COUNT);
         if (upscaled)
+            magpie_base = magpie_real_cugan;
+        else
             reset_mode = 1;
+    } else {
+        reset_mode = 1;
     }
 
     SIZE in_size = { .cx = in_width, .cy = in_height };
@@ -570,8 +620,8 @@ static void magpie_upscaling_update(bool upscaled, int selected, int ctx_top_bot
 
         magpie_free_aux(i, screen_top_bot);
     }
-    if (!reset_mode && !magpie_render[i][screen_top_bot] && render_mode >= 0) {
-        rp_lock_wait(upscaling_update_lock);
+    if (!reset_mode && !magpie_render[i][screen_top_bot] && render_mode >= 0 && magpie_base) {
+        rp_lock_wait(magpie_update_lock);
 
         magpie_free_aux(i, screen_top_bot);
 
@@ -596,11 +646,10 @@ static void magpie_upscaling_update(bool upscaled, int selected, int ctx_top_bot
             goto fail;
         }
 
-        magpie_render[i][screen_top_bot] = magpie_render_init(magpie, render_mode, d3d11device[i], d3d11device_context[i], magpie_in_tex[i][screen_top_bot], &out_size);
+        magpie_render[i][screen_top_bot] = magpie_render_init(magpie_base, render_mode, d3d11device[i], d3d11device_context[i], magpie_in_tex[i][screen_top_bot], &out_size);
         ID3D11Texture2D *tex = magpie_render[i][screen_top_bot] ? magpie_render_output(magpie_render[i][screen_top_bot]) : NULL;
         if (!tex) {
-            if (!upscaled)
-                err_log("magpie_render_init failed\n");
+            err_log("magpie_render_init failed\n");
 
             if (magpie_render[i][screen_top_bot]) {
                 magpie_render_close(magpie_render[i][screen_top_bot]);
@@ -627,8 +676,10 @@ static void magpie_upscaling_update(bool upscaled, int selected, int ctx_top_bot
         magpie_in_size[i][screen_top_bot] = in_size;
 
 fail:
-        rp_lock_rel(upscaling_update_lock);
+        rp_lock_rel(magpie_update_lock);
     }
+
+    return reset_mode;
 }
 
 void ui_renderer_d3d11_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared, float bg[4]) {
@@ -727,7 +778,7 @@ static void d3d11_draw_screen(bool upscaled, int upscaling_selected, int ctx_top
     if (in_tex && magpie) {
         int width = SCREEN_WIDTH;
         int height = (screen_top_bot == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1);
-        magpie_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot, width, height, ctx_width[screen_top_bot], ctx_height[screen_top_bot]);
+        int reset_mode = magpie_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot, width, height, ctx_width[screen_top_bot], ctx_height[screen_top_bot]);
 
         if (magpie_render[i][screen_top_bot]) {
             ID3D11DeviceContext_CopyResource(d3d11device_context[i], (ID3D11Resource *)magpie_in_tex[i][screen_top_bot], in_tex);
@@ -738,8 +789,12 @@ static void d3d11_draw_screen(bool upscaled, int upscaling_selected, int ctx_top
             ID3D11DeviceContext_OMSetRenderTargets(d3d11device_context[i], 1, &d3d_rtv[p], NULL);
             D3D11_VIEWPORT vp = { .Width = ui_ctx_width[p], .Height = ui_ctx_height[p] };
             ID3D11DeviceContext_RSSetViewports(d3d11device_context[i], 1, &vp);
-        } else if (!upscaled) {
-            ui_upscaling_selected = UI_UPSCALING_FILTER_NONE;
+        } else if (!reset_mode) {
+            if (IS_UPSCALING_0(upscaling_selected)) {
+                ui_upscaling_selected = UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE);
+            } else if (IS_UPSCALING_1(upscaling_selected)) {
+                ui_upscaling_selected = UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN);
+            }
         }
     }
 
