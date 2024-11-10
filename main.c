@@ -16,6 +16,7 @@
 #include "ntr_hb.h"
 #include "ntr_rp.h"
 #include "ui_main_nk.h"
+#include "realcugan-ncnn-vulkan/lib.h"
 
 #include <math.h>
 
@@ -100,6 +101,9 @@ int opt_flag_d3d, opt_flag_ogl, opt_flag_gles, opt_flag_angle, opt_flag_no_csc, 
 #define opt_name_sdl_sw "sdl-sw"
 #define opt_name_no_csc "no-csc"
 #define opt_name_ogl_dbg "ogl-dbg"
+#define opt_name_testing_no_ext_mem "testing-no-ext-mem"
+#define opt_name_testing_no_shared_sem "testing-no-shared-sem"
+#define opt_name_testing_no_fp16 "testing-no-fp16"
 
 #define mod_name_csc "csc"
 
@@ -114,6 +118,9 @@ static struct option long_options[] = {
     {opt_name_sdl_hw, no_argument, &opt_flag_sdl_hw, 1},
     {opt_name_sdl_sw, no_argument, &opt_flag_sdl_sw, 1},
     {opt_name_ogl_dbg, no_argument, &is_renderer_ogl_dbg, 1},
+    {opt_name_testing_no_ext_mem, no_argument, &opt_testing_no_ext_mem, 1},
+    {opt_name_testing_no_shared_sem, no_argument, &opt_testing_no_shared_sem, 1},
+    {opt_name_testing_no_fp16, no_argument, &opt_testing_no_fp16, 1},
     {0, 0, 0, 0}};
 
 static void add_arg(enum ui_renderer_t arg, const char *name) {
@@ -225,6 +232,18 @@ static void parse_args(int argc, char **argv)
 
     if (is_renderer_ogl_dbg) {
         printf("using %s\n", opt_name_ogl_dbg);
+    }
+
+    if (opt_testing_no_ext_mem) {
+        printf("using %s\n", opt_name_testing_no_ext_mem);
+    }
+
+    if (opt_testing_no_shared_sem) {
+        printf("using %s\n", opt_name_testing_no_shared_sem);
+    }
+
+    if (opt_testing_no_fp16) {
+        printf("using %s\n", opt_name_testing_no_fp16);
     }
 
     if (renderer_count) {

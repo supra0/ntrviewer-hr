@@ -1,6 +1,7 @@
 // realcugan implemented with ncnn library
 
 #include "realcugan.h"
+#include "lib.h"
 
 #include <algorithm>
 #include <vector>
@@ -95,12 +96,15 @@ int RealCUGAN::load(const std::string& parampath, const std::string& modelpath)
 #endif
 {
     net.opt.use_vulkan_compute = vkdev ? true : false;
-    if (!vkdev || (vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage() && vkdev->info.support_int8_storage())) {
+    if (!opt_testing_no_fp16 && (!vkdev || (vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage() && vkdev->info.support_int8_storage()))) {
         net.opt.use_fp16_packed = true;
         net.opt.use_fp16_storage = vkdev ? true : false;
         net.opt.use_fp16_arithmetic = false;
         net.opt.use_int8_storage = true;
     } else {
+        if (opt_testing_no_fp16) {
+            fprintf(stderr, "float16 and int8 support masked\n");
+        }
         if (d3d11)
             support_ext_mem = false;
         net.opt.use_fp16_packed = false;
@@ -775,8 +779,8 @@ int RealCUGAN::process(int index, const ncnn::Mat& inimage, ncnn::Mat& outimage)
             } else {
                 cmd.submit_and_wait(out_gpu_tex[index]->first_subseq ? out_gpu_tex[index]->vk_sem_next : nullptr, VK_PIPELINE_STAGE_TRANSFER_BIT, out_gpu_tex[index]->vk_sem, &out_gpu_tex[index]->fence);
             }
-                out_gpu_tex[index]->need_wait = out_gpu_tex[index]->first_subseq = true;
-            }
+            out_gpu_tex[index]->need_wait = out_gpu_tex[index]->first_subseq = true;
+        }
 
         // download
 #if 1
@@ -950,7 +954,7 @@ static PFN_vkGetSemaphoreFdKHR vkGetSemaphoreFdKHR;
 
 static bool shared_sem_supported(const RealCUGAN* cugan)
 {
-    bool ret = cugan->vkdev->info.support_VK_KHR_external_semaphore() && GLAD_GL_EXT_semaphore &&
+    bool ret = !opt_testing_no_shared_sem && cugan->vkdev->info.support_VK_KHR_external_semaphore() && GLAD_GL_EXT_semaphore &&
 #ifdef _WIN32
         cugan->vkdev->info.support_VK_KHR_external_semaphore_win32() && GLAD_GL_EXT_semaphore_win32;
 #else

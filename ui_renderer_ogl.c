@@ -782,9 +782,11 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
     bool dim3 = false;
     bool success = false;
 
+    int upscaling_selected = ui_upscaling_selected;
+
     if (upscaled) {
         if (!data) {
-            if (!ctx->tex_upscaled_prev[i]) {
+            if (ctx->upscaling_selected_prev != upscaling_selected || !ctx->tex_upscaled_prev[i]) {
                 data = ctx->data_prev;
             } else {
                 glActiveTexture(GL_TEXTURE0);
@@ -911,13 +913,15 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
         }
     }
 
+    bool need_tex_update = ctx->upscaling_selected_prev != upscaling_selected || ctx->win_width_prev != win_width_drawable || ctx->win_height_prev != win_height_drawable || ctx->view_mode_prev != view_mode;
+
     if (use_fsr) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        if (data || !ctx->tex_fsr_prev[i] || ctx->win_width_prev != win_width_drawable || ctx->win_height_prev != win_height_drawable || ctx->view_mode_prev != view_mode) {
+        if (data || !ctx->tex_fsr_prev[i] || need_tex_update) {
             if (!dim3 && tex_upscaled && gl_sem) {
                 GLenum layout = GL_LAYOUT_TRANSFER_DST_EXT;
                 glWaitSemaphoreEXT(gl_sem, 0, NULL, 1, &tex_upscaled, &layout);
@@ -944,7 +948,7 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
             glBindVertexArray(gl_vao[i][screen_top_bot]);
             glBindBuffer(GL_ARRAY_BUFFER, gl_vbo[i][screen_top_bot]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_ebo[i]);
-            if (ctx->win_width_prev != win_width_drawable || ctx->win_height_prev != win_height_drawable || ctx->view_mode_prev != view_mode)
+            if (need_tex_update)
                 glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
         } else {
             glEnableVertexAttribArray(gl_position_loc[i]);
@@ -972,7 +976,7 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
             glBindVertexArray(gl_vao[i][screen_top_bot]);
             glBindBuffer(GL_ARRAY_BUFFER, gl_vbo[i][screen_top_bot]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_ebo[i]);
-            if (ctx->win_width_prev != win_width_drawable || ctx->win_height_prev != win_height_drawable || ctx->view_mode_prev != view_mode)
+            if (need_tex_update)
                 glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
         } else {
             glEnableVertexAttribArray(gl_position_loc[i]);
@@ -1009,6 +1013,7 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
     ctx->win_width_prev = win_width_drawable;
     ctx->win_height_prev = win_height_drawable;
     ctx->view_mode_prev = view_mode;
+    ctx->upscaling_selected_prev = upscaling_selected;
 }
 
 #define MAX_VERTEX_MEMORY 512 * 1024

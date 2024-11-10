@@ -72,22 +72,16 @@ void ui_common_sdl_destroy(void) {
 }
 
 void ui_view_mode_update(view_mode_t view_mode) {
-    switch (view_mode) {
-        case VIEW_MODE_TOP_BOT:
-        case VIEW_MODE_TOP:
-        case VIEW_MODE_BOT:
-            SDL_HideWindow(ui_sdl_win[SCREEN_BOT]);
-            break;
-
-        case VIEW_MODE_SEPARATE:
-            SDL_ShowWindow(ui_sdl_win[SCREEN_BOT]);
-            break;
-    }
+    if (view_mode == VIEW_MODE_SEPARATE)
+        SDL_ShowWindow(ui_sdl_win[SCREEN_BOT]);
 
     SDL_SetWindowFullscreen(ui_sdl_win[SCREEN_TOP], 0);
     SDL_RestoreWindow(ui_sdl_win[SCREEN_TOP]);
     SDL_SetWindowFullscreen(ui_sdl_win[SCREEN_BOT], 0);
     SDL_RestoreWindow(ui_sdl_win[SCREEN_BOT]);
+
+    if (view_mode != VIEW_MODE_SEPARATE)
+        SDL_HideWindow(ui_sdl_win[SCREEN_BOT]);
 
     switch (view_mode) {
         case VIEW_MODE_TOP_BOT:

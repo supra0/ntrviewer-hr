@@ -20,6 +20,8 @@
 
 #define REALCUGAN_WORK_COUNT (2)
 
+int opt_testing_no_ext_mem, opt_testing_no_shared_sem, opt_testing_no_fp16;
+
 static RealCUGAN* realcugan[SCREEN_COUNT * REALCUGAN_WORK_COUNT];
 static int realcugan_indices[SCREEN_COUNT * FBI_COUNT];
 static int realcugan_work_indices[SCREEN_COUNT];
@@ -249,6 +251,13 @@ static int realcugan_d3d11_open(ID3D11Device *device[SCREEN_COUNT], ID3D11Device
         fprintf(stderr, "no float16 and int8 support, using slow path\n");
     }
 
+    if (opt_testing_no_ext_mem) {
+        if (realcugan_support_ext_mem) {
+            fprintf(stderr, "D3D/Vk interop masked\n");
+            realcugan_support_ext_mem = 0;
+        }
+    }
+
     if (realcugan_support_ext_mem) {
         fprintf(stderr, "using D3D/Vk interop\n");
         d3d_device = device;
@@ -336,6 +345,13 @@ static int realcugan_ogl_open() {
 
     if (!(vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage() && vkdev->info.support_int8_storage())) {
         fprintf(stderr, "no float16 and int8 support, using slow path\n");
+    }
+
+    if (opt_testing_no_ext_mem) {
+        if (realcugan_support_ext_mem) {
+            fprintf(stderr, "OGL/Vk interop masked\n");
+            realcugan_support_ext_mem = 0;
+        }
     }
 
     if (realcugan_support_ext_mem) {

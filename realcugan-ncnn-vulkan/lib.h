@@ -26,6 +26,8 @@ extern GLuint realcugan_ogl_run(int ctx_top_bot, int screen_top_bot, int index, 
 extern void realcugan_next(int ctx_top_bot, int screen_top_bot, int index);
 extern void realcugan_destroy(void);
 
+extern int opt_testing_no_ext_mem, opt_testing_no_shared_sem, opt_testing_no_fp16;
+
 #ifdef __cplusplus
 }
 #endif
