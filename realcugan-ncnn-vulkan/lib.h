@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #define REALCUGAN_SCALE SCREEN_UPSCALE_FACTOR
+#define D3D11_MUTEX_TIMEOUT (2000)
 
 extern int realcugan_d3d11_create(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);
 extern int realcugan_d3d11_reset(ID3D11Device *device[SCREEN_COUNT], ID3D11DeviceContext *context[SCREEN_COUNT], IDXGIAdapter1 *adapter);

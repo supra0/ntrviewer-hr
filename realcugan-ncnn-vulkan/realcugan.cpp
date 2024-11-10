@@ -760,7 +760,7 @@ int RealCUGAN::process(int index, const ncnn::Mat& inimage, ncnn::Mat& outimage)
                 if (out_gpu_tex[index]->d3d_resource) {
                     const uint64_t acqKey = 0;
                     const uint64_t relKey = 1;
-                    const uint32_t timeout = 2000;
+                    const uint32_t timeout = D3D11_MUTEX_TIMEOUT;
                     VkDeviceMemory memory = out_gpu_tex[index]->data->memory;
                     VkWin32KeyedMutexAcquireReleaseInfoKHR keyedMutexInfo { VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR };
                     keyedMutexInfo.acquireCount = 1;
