@@ -43,7 +43,7 @@ struct magpie_render_t {
 
 struct magpie_t {
 	std::vector<ScalingMode> scalingModes;
-	std::vector<std::string> namesUtf8;
+	std::vector<std::string> display_names;
 };
 
 static bool magpie_startup_done;
@@ -54,8 +54,8 @@ extern "C" void magpie_startup(void) {
 	Logger::Get().Initialize(
 		spdlog::level::info,
 		CommonSharedConstants::LOG_PATH,
-		100000,
-		2
+		65535,
+		1
 	);
 
 	magpie_startup_done = 1;
@@ -65,7 +65,7 @@ static bool LoadScalingMode(
 	const rapidjson::GenericObject<true, rapidjson::Value>& scalingModeObj,
 	ScalingMode& scalingMode
 ) {
-	if (!JsonHelper::ReadString(scalingModeObj, "name", scalingMode.name)) {
+	if (!JsonHelper::ReadString(scalingModeObj, "name", scalingMode.name, true)) {
 		return false;
 	}
 
@@ -89,7 +89,7 @@ static bool LoadScalingMode(
 		auto elemObj = elem.GetObj();
 		EffectOption& effect = scalingMode.effects.emplace_back();
 
-		if (!JsonHelper::ReadString(elemObj, "name", effect.name)) {
+		if (!JsonHelper::ReadString(elemObj, "name", effect.name, true)) {
 			scalingMode.effects.pop_back();
 			continue;
 		}
@@ -186,6 +186,7 @@ struct magpie_t *magpie_load(const char *filename) {
 	auto magpie = std::make_unique<magpie_t>();
 
 	magpie->scalingModes = ImportScalingModes(((const rapidjson::Document&)doc).GetObj());
+	magpie->display_names.resize(magpie_mode_count(magpie.get()));
 
 	return magpie.release();
 }
@@ -204,15 +205,11 @@ const char *magpie_mode_name(struct magpie_t *magpie, size_t index, const char *
 		return 0;
 	}
 
-	if (index >= magpie->namesUtf8.size()) {
-		magpie->namesUtf8.resize(index + 1);
+	if (magpie->display_names[index].empty()) {
+		magpie->display_names[index] = prefix + StrUtils::UTF16ToUTF8(magpie->scalingModes[index].name);
 	}
 
-	if (magpie->namesUtf8[index].empty()) {
-		magpie->namesUtf8[index] = prefix + StrUtils::UTF16ToUTF8(magpie->scalingModes[index].name);
-	}
-
-	return magpie->namesUtf8[index].c_str();
+	return magpie->display_names[index].c_str();
 }
 
 static std::optional<EffectDesc> CompileEffect(const EffectOption& effectOption) noexcept {

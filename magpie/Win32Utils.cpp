@@ -432,11 +432,6 @@ const std::wstring& Win32Utils::GetKeyName(uint8_t key) noexcept {
     return GetKeyNames()[key];
 }
 
-static std::wstring_view ExtractDirectory(std::wstring_view path) noexcept {
-    size_t delimPos = path.find_last_of(L'\\');
-    return delimPos == std::wstring_view::npos ? path : path.substr(0, delimPos + 1);
-}
-
 #include <pathcch.h>
 #include <strsafe.h>
 

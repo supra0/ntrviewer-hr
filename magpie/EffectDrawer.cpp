@@ -8,6 +8,7 @@
 #include "DirectXHelper.h"
 #include "StrUtils.h"
 #include "Logger.h"
+#include "CommonSharedConstants.h"
 #include "muParser.h"
 #include "fmt/format.h"
 
@@ -145,8 +146,8 @@ bool EffectDrawer::Initialize(
 			// 从文件加载纹理
 			size_t delimPos = desc.name.find_last_of('\\');
 			std::string texPath = delimPos == std::string::npos
-				? StrUtils::Concat("effects\\", texDesc.source)
-				: StrUtils::Concat("effects\\", std::string_view(desc.name.c_str(), delimPos + 1), texDesc.source);
+				? StrUtils::Concat(StrUtils::UTF16ToUTF8(CommonSharedConstants::EFFECTS_DIR), texDesc.source)
+				: StrUtils::Concat(StrUtils::UTF16ToUTF8(CommonSharedConstants::EFFECTS_DIR), std::string_view(desc.name.c_str(), delimPos + 1), texDesc.source);
 			_textures[i] = TextureLoader::Load(
 				StrUtils::UTF8ToUTF16(texPath).c_str(), deviceResources.GetD3DDevice());
 			if (!_textures[i]) {

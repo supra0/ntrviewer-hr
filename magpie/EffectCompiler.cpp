@@ -1386,8 +1386,8 @@ static uint32_t CompilePasses(
 
 	size_t delimPos = desc.name.find_last_of('\\');
 	PassInclude passInclude(delimPos == std::string::npos 
-		? L"effects\\"
-		: L"effects\\" + StrUtils::UTF8ToUTF16(std::string_view(desc.name.c_str(), delimPos + 1)));
+		? CommonSharedConstants::EFFECTS_DIR
+		: StrUtils::Concat(CommonSharedConstants::EFFECTS_DIR, StrUtils::UTF8ToUTF16(std::string_view(desc.name.c_str(), delimPos + 1))));
 
 	// 并行生成代码和编译
 	Win32Utils::RunParallel([&](uint32_t id) {

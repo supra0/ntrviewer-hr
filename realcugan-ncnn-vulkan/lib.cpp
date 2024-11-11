@@ -532,7 +532,7 @@ int realcugan_run(int ctx_top_bot, int locks_index, int w, int h, int c, const u
     ncnn::Mat inimage = ncnn::Mat(w, h, (void*)indata, (size_t)c, c);
     ncnn::Mat outimage = ncnn::Mat(w * REALCUGAN_SCALE, h * REALCUGAN_SCALE, (void*)outdata, (size_t)c, c);
 
-    if (locks_index >= realcugan_locks.size()) {
+    if (locks_index >= (int)realcugan_locks.size()) {
         return -2;
     }
 
@@ -590,7 +590,7 @@ GLuint realcugan_ogl_run(int ctx_top_bot, int screen_top_bot, int index, int w, 
 extern "C" void realcugan_next(int ctx_top_bot, int screen_top_bot, int index)
 {
     int locks_index = realcugan_index(screen_top_bot, index, 0);
-    if (!realcugan[locks_index] || ctx_top_bot >= realcugan[locks_index]->out_gpu_tex.size()) {
+    if (!realcugan[locks_index] || ctx_top_bot >= (int)realcugan[locks_index]->out_gpu_tex.size()) {
         return;
     }
     OutVkImageMat *out = realcugan[locks_index]->out_gpu_tex[ctx_top_bot];

@@ -6,9 +6,8 @@
 include/ncnn
 include/*.h
 lib
-effects
-cache
-logs
+magpie-*
+placebo-*
 
 ntrviewer*
 _win32*

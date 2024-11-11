@@ -38,7 +38,7 @@ typedef struct VkWin32KeyedMutexAcquireReleaseInfoKHR {
 static const VkStructureType VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR = (VkStructureType)1000075000;
 
 #ifdef _WIN32
-RealCUGAN::RealCUGAN(int gpuid, ID3D11Device **dev, ID3D11DeviceContext **ctx, bool _tta_mode, int num_threads) : dev(dev), ctx(ctx), d3d11(true) {
+RealCUGAN::RealCUGAN(int gpuid, ID3D11Device **dev, ID3D11DeviceContext **ctx, bool tta_mode, int num_threads) : dev(dev), ctx(ctx), d3d11(true) {
     init(gpuid, tta_mode, num_threads);
 }
 #endif
@@ -79,7 +79,7 @@ RealCUGAN::~RealCUGAN()
         delete bicubic_4x;
     }
 
-    for (int i = 0; i < out_gpu_tex.size(); ++i) {
+    for (int i = 0; i < (int)out_gpu_tex.size(); ++i) {
         if (out_gpu_tex[i]) {
             delete out_gpu_tex[i]->cmd;
             out_gpu_tex[i]->release(this);
@@ -299,9 +299,6 @@ int RealCUGAN::process(int index, const ncnn::Mat& inimage, ncnn::Mat& outimage)
 #endif
     }
 
-    if (index + 1 > out_gpu_tex.size()) {
-        out_gpu_tex.resize(index + 1);
-    }
     if (!out_gpu_tex[index]) {
         out_gpu_tex[index] = new OutVkImageMat(index);
         if (support_ext_mem) {

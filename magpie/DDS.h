@@ -50,6 +50,9 @@ struct DDS_PIXELFORMAT {
 // DDS_BUMPLUMINANCE 0x00040000
 
 
+#ifdef MAKEFOURCC
+#undef MAKEFOURCC
+#endif
 #define MAKEFOURCC(ch0, ch1, ch2, ch3) \
                 (static_cast<uint32_t>(static_cast<uint8_t>(ch0)) \
                 | (static_cast<uint32_t>(static_cast<uint8_t>(ch1)) << 8) \

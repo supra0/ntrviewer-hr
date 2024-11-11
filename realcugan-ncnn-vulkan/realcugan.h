@@ -4,6 +4,7 @@
 #define REALCUGAN_H
 
 #include <string>
+#include <array>
 
 // ncnn
 #include "ncnn/net.h"
@@ -15,6 +16,10 @@
 #include <dxgi1_2.h>
 #endif
 #include "glad/glad.h"
+
+extern "C" {
+#include "../const.h"
+}
 
 class RealCUGAN;
 
@@ -88,7 +93,7 @@ public:
     RealCUGAN(int gpuid, bool tta_mode = false, int num_threads = 1);
 
     bool d3d11 = false;
-    void init(int gpuid, bool _tta_mode, int num_threads) {
+    void init(int gpuid, bool tta_mode, int num_threads) {
         vkdev = gpuid == -1 ? 0 : ncnn::get_gpu_device(gpuid);
 
         net.opt.num_threads = num_threads;
@@ -99,7 +104,7 @@ public:
         bicubic_2x = 0;
         bicubic_3x = 0;
         bicubic_4x = 0;
-        tta_mode = _tta_mode;
+        this->tta_mode = tta_mode;
 
         if (vkdev) {
             blob_vkallocator = vkdev->acquire_blob_allocator();
@@ -136,7 +141,7 @@ public:
     ncnn::Layer* bicubic_4x = 0;
     bool tta_mode = 0;
 
-    mutable std::vector<OutVkImageMat*> out_gpu_tex;
+    mutable std::array<OutVkImageMat*, SCREEN_COUNT> out_gpu_tex = {};
     bool support_ext_mem = 0;
     bool tiling_linear = 0;
 

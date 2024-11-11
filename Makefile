@@ -21,7 +21,7 @@ NASM := -DELF -felf64
 endif
 LDLIBS += -lplacebo -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools
 
-GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o
+GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o placebo.o
 ifeq ($(OS),Windows_NT)
 MAGP_SRC := $(wildcard magpie/*.cpp)
 MAGP_OBJ := $(MAGP_SRC:.cpp=.o)
@@ -97,23 +97,26 @@ jpeg_turbo/jpeg16/%.o: jpeg_turbo/jpeg16/%.c
 %.o: %.asm
 	nasm $< -o $@ $(NASM) -D__x86_64__ -Ijpeg_turbo/simd/nasm -Ijpeg_turbo/simd
 
-%.o: %.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
+fsr/%.o: fsr/%.cpp
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-unused-parameter -Wno-unused-function -Wno-ignored-qualifiers
+
+placebo.o: placebo.cpp
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Imagpie
 
 muparser/%.o: muparser/%.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w -DMUPARSER_STATIC
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -DMUPARSER_STATIC -Wno-unused-parameter
 
 magpie/%.o: magpie/%.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w -DMUPARSER_STATIC -DFMT_HEADER_ONLY -std=c++20 -Imuparser -Imagpie
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -DMUPARSER_STATIC -DFMT_HEADER_ONLY -std=c++20 -Imuparser -Imagpie -Wno-missing-field-initializers -Wno-unknown-pragmas -Wno-sign-compare -Wno-class-memaccess -Wno-cast-function-type
 
 ntrviewer.res.o: win_manifest.rc win_manifest.xml
 	windres --input $< --output $@ --output-format=coff
 
 realcugan_lib.o: realcugan-ncnn-vulkan/lib.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-missing-field-initializers
 
 realcugan.o: realcugan-ncnn-vulkan/realcugan.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -w
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-missing-field-initializers
 
 fecal/gf256.o: fecal/gf256.cpp
 	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-implicit-fallthrough -DGF256_TARGET_MOBILE

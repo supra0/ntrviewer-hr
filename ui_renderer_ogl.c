@@ -11,6 +11,7 @@
 #include "ui_main_nk.h"
 #include "fsr/fsr_main.h"
 #include "realcugan-ncnn-vulkan/lib.h"
+#include "placebo.h"
 #include <libplacebo/opengl.h>
 
 SDL_Window *ogl_win[SCREEN_COUNT];
@@ -449,6 +450,11 @@ static bool upscaling_fsr;
 #define IS_UPSCALING_0(ui_index) (UPSCALING_0_MODE(ui_index) >= 0 && UPSCALING_0_MODE(ui_index) < upscaling_0_count)
 #define IS_UPSCALING_1(ui_index) (UPSCALING_1_MODE(ui_index) >= 0 && UPSCALING_1_MODE(ui_index) < upscaling_1_count)
 
+static struct placebo_t *placebo;
+static int placebo_count;
+static struct placebo_t *placebo_real_cugan;
+static int placebo_real_cugan_count;
+
 static pl_opengl pl_ogl_dev[SCREEN_COUNT];
 static pl_log pl_log_dev;
 
@@ -490,18 +496,25 @@ static void ogl_upscaling_update(int ctx_top_bot) {
 static int ogl_upscaling_init(void) {
     ui_upscaling_filter_count = UPSCALING_DEFAULT_COUNT;
 
-    pl_log_dev = pl_log_create(PL_API_VER, pl_log_params(
-        .log_cb = pl_log_color,
-        .log_level = PL_LOG_INFO,
-    ));
-    if (pl_log_dev) {
-        for (int j = 0; j < SCREEN_COUNT; ++j) {
-            SDL_GL_MakeCurrent(ogl_win[j], gl_context[j]);
-            pl_ogl_dev[j] = pl_opengl_create(pl_log_dev, pl_opengl_params(
-                .get_proc_addr = (pl_voidfunc_t (*)(const char *))SDL_GL_GetProcAddress,
-            ));
-        }
-        SDL_GL_MakeCurrent(NULL, NULL);
+    pl_log_dev = placebo_log_create();
+    for (int j = 0; j < SCREEN_COUNT; ++j) {
+        SDL_GL_MakeCurrent(ogl_win[j], gl_context[j]);
+        pl_ogl_dev[j] = pl_opengl_create(pl_log_dev, pl_opengl_params(
+            .get_proc_addr = (pl_voidfunc_t (*)(const char *))SDL_GL_GetProcAddress,
+        ));
+    }
+    SDL_GL_MakeCurrent(NULL, NULL);
+
+    placebo = placebo_load("placebo.json");
+    if (placebo) {
+        upscaling_0_count = placebo_count = placebo_mode_count(placebo);
+        ui_upscaling_filter_count += placebo_count;
+    }
+
+    placebo_real_cugan = placebo_load("placebo-real-cugan.json");
+    if (placebo_real_cugan) {
+        upscaling_1_count = placebo_real_cugan_count = placebo_mode_count(placebo_real_cugan);
+        ui_upscaling_filter_count += placebo_real_cugan_count;
     }
 
     ui_upscaling_filter_options = malloc(ui_upscaling_filter_count * sizeof(*ui_upscaling_filter_options));
@@ -512,6 +525,14 @@ static int ogl_upscaling_init(void) {
     ui_upscaling_filter_options[UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE)] = NK_UPSCALE_TYPE_TEXT_NONE NK_UPSCALE_TYPE_TEXT_NONE "None";
     ui_upscaling_filter_options[UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN)] = NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_NONE "Real-CUGAN";
     ui_upscaling_filter_options[UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR)] = NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_NONE "Real-CUGAN + FSR";
+
+    for (int i = 0; i < placebo_count; ++i) {
+        ui_upscaling_filter_options[UPSCALING_0_UI_INDEX(i)] = placebo_mode_name(placebo, i, NK_UPSCALE_TYPE_TEXT_NONE NK_UPSCALE_TYPE_TEXT_PLACEBO);
+    }
+
+    for (int i = 0; i < placebo_real_cugan_count; ++i) {
+        ui_upscaling_filter_options[UPSCALING_1_UI_INDEX(i)] = placebo_mode_name(placebo_real_cugan, i, NK_UPSCALE_TYPE_TEXT_REAL NK_UPSCALE_TYPE_TEXT_PLACEBO);
+    }
 
     ui_upscaling_selected = 0;
 
@@ -524,7 +545,18 @@ static void ogl_upscaling_close(void) {
         pl_opengl_destroy(&pl_ogl_dev[j]);
     }
     SDL_GL_MakeCurrent(NULL, NULL);
-    pl_log_destroy(&pl_log_dev);
+    placebo_log_destroy(&pl_log_dev);
+
+    if (placebo) {
+        placebo_unload(placebo);
+        placebo = 0;
+    }
+    placebo_count = 0;
+    if (placebo_real_cugan) {
+        placebo_unload(placebo_real_cugan);
+        placebo_real_cugan = 0;
+    }
+    placebo_real_cugan_count = 0;
 
     if (ui_upscaling_filter_options) {
         free(ui_upscaling_filter_options);

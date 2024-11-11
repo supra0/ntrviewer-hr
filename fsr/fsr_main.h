@@ -9,7 +9,7 @@ extern "C" {
 
 #include "../const.h"
 
-GLuint fsr_main(int tb, int top_bot, GLuint inputTexture, uint32_t in_w, uint32_t in_h, uint32_t out_w, uint32_t out_h, float rcasAtt);
+GLuint fsr_main(int ctx_top_bot, int screen_top_bot, GLuint inputTexture, uint32_t in_w, uint32_t in_h, uint32_t out_w, uint32_t out_h, float rcasAtt);
 
 #ifdef __cplusplus
 }
