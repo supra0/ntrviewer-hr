@@ -275,11 +275,15 @@ void ui_windows_titles_update(void)
     }
 }
 
-static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, int index, view_mode_t view_mode, bool win_shared) {
+static void draw_screen_dispatch(UNUSED struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, UNUSED int index, view_mode_t view_mode, UNUSED bool win_shared) {
     if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_d3d11_draw(ctx, data, width, height, screen_top_bot, ctx_top_bot, index, view_mode, win_shared);
+#endif
     } else if (is_renderer_sdl_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_ogl_draw(ctx, data, width, height, screen_top_bot, ctx_top_bot, index, view_mode, win_shared);
+#endif
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_draw(data, width, height, screen_top_bot, ctx_top_bot, view_mode);
     }
@@ -287,7 +291,10 @@ static void draw_screen_dispatch(struct rp_buffer_ctx_t *ctx, uint8_t *data, int
 }
 
 int draw_screen(struct rp_buffer_ctx_t *ctx, int width, int height, int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared) {
-    realcugan_next(ctx_top_bot, screen_top_bot, ctx->index_display_2);
+#ifndef USE_SDL_RENDERER_ONLY
+    if (is_renderer_csc())
+        realcugan_next(ctx_top_bot, screen_top_bot, ctx->index_display_2);
+#endif
 
     rp_lock_wait(ctx->status_lock);
     enum frame_buffer_status_t status = ctx->status;

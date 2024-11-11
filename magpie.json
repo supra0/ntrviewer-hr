@@ -4,18 +4,11 @@
             "name": "Anime4K",
             "effects": [
                 {
-                    "name": "Anime4K\\Anime4K_Restore_Soft_UL"
+                    "name": "Anime4K\\Anime4K_Restore_Soft_VL"
                 },
                 {
-                    "name": "Sharpen\\LumaSharpen"
-                },
-                {
-                    "name": "Jinc",
-                    "scalingType": 3,
-                    "scale": {
-                        "x": 1.0,
-                        "y": 1.0
-                    }
+                    "name": "Bilinear",
+                    "scalingType": 3
                 }
             ]
         },
@@ -23,21 +16,26 @@
             "name": "Anime4K + 3D AA",
             "effects": [
                 {
-                    "name": "Anime4K\\Anime4K_Restore_Soft_UL"
+                    "name": "Anime4K\\Anime4K_Restore_Soft_VL"
                 },
                 {
                     "name": "Anime4K\\Anime4K_3D_AA_Upscale_US"
                 },
                 {
-                    "name": "Sharpen\\LumaSharpen"
+                    "name": "Bilinear",
+                    "scalingType": 3
+                }
+            ]
+        },
+        {
+            "name": "Anime4K + CRT",
+            "effects": [
+                {
+                    "name": "Anime4K\\Anime4K_Restore_Soft_VL"
                 },
                 {
-                    "name": "Jinc",
-                    "scalingType": 3,
-                    "scale": {
-                        "x": 1.0,
-                        "y": 1.0
-                    }
+                    "name": "CRT\\CRT_Lottes",
+                    "scalingType": 3
                 }
             ]
         }

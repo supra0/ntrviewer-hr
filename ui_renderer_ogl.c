@@ -454,6 +454,9 @@ static struct placebo_t *placebo;
 static int placebo_count;
 static struct placebo_t *placebo_real_cugan;
 static int placebo_real_cugan_count;
+static int placebo_mode[SCREEN_COUNT][SCREEN_COUNT];
+static struct placebo_render_t *placebo_render[SCREEN_COUNT][SCREEN_COUNT];
+static int placebo_render_mode[SCREEN_COUNT][SCREEN_COUNT];
 
 static pl_opengl pl_ogl_dev[SCREEN_COUNT];
 static pl_log pl_log_dev;
@@ -483,11 +486,10 @@ static void ogl_upscaling_update(int ctx_top_bot) {
             } else {
                 upscaling_filter_realcugan = 1;
             }
-
-            upscaling_fsr = upscaling_filter_realcugan && upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR);
         } else {
             upscaling_filter_realcugan = 0;
         }
+        upscaling_fsr = upscaling_filter_realcugan && upscaling_selected == UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN_FSR);
     }
 
     rp_lock_rel(upscaling_update_lock);
@@ -502,6 +504,11 @@ static int ogl_upscaling_init(void) {
         pl_ogl_dev[j] = pl_opengl_create(pl_log_dev, pl_opengl_params(
             .get_proc_addr = (pl_voidfunc_t (*)(const char *))SDL_GL_GetProcAddress,
         ));
+
+        for (int i = 0; i < SCREEN_COUNT; ++i) {
+            placebo_mode[j][i] = -1;
+            placebo_render_mode[j][i] = -1;
+        }
     }
     SDL_GL_MakeCurrent(NULL, NULL);
 
@@ -542,6 +549,14 @@ static int ogl_upscaling_init(void) {
 static void ogl_upscaling_close(void) {
     for (int j = 0; j < SCREEN_COUNT; ++j) {
         SDL_GL_MakeCurrent(ogl_win[j], gl_context[j]);
+
+        for (int i = 0; i < SCREEN_COUNT; ++i) {
+            if (placebo_render[j][i]) {
+                placebo_render_close(placebo_render[j][i]);
+                placebo_render[j][i] = 0;
+            }
+        }
+
         pl_opengl_destroy(&pl_ogl_dev[j]);
     }
     SDL_GL_MakeCurrent(NULL, NULL);
@@ -823,6 +838,57 @@ void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_
     }
 }
 
+static int placebo_upscaling_update(bool upscaled, int selected, int ctx_top_bot, int screen_top_bot) {
+    int i = ctx_top_bot;
+
+    int mode = -1;
+    int render_mode = -1;
+    bool reset_mode = 0;
+    struct placebo_t *placebo_base = 0;
+    if (IS_UPSCALING_0(selected)) {
+        render_mode = UPSCALING_0_MODE(selected);
+        if (!upscaled) {
+            placebo_base = placebo;
+            mode = 1;
+        } else
+            reset_mode = 1;
+    } else if (IS_UPSCALING_1(selected)) {
+        render_mode = UPSCALING_1_MODE(selected);
+        if (upscaled) {
+            placebo_base = placebo_real_cugan;
+            mode = 1;
+        } else
+            reset_mode = 1;
+    } else {
+        reset_mode = 1;
+    }
+
+    if (
+        placebo_render[i][screen_top_bot] && (
+            placebo_mode[i][screen_top_bot] != mode ||
+            placebo_render_mode[i][screen_top_bot] != render_mode ||
+            reset_mode
+        )
+    ) {
+        placebo_render_close(placebo_render[i][screen_top_bot]);
+        placebo_render[i][screen_top_bot] = 0;
+    }
+
+    if (!reset_mode && !placebo_render[i][screen_top_bot] && render_mode >= 0 && placebo_base) {
+        placebo_render[i][screen_top_bot] = placebo_render_init(placebo_base, render_mode, pl_ogl_dev[i]->gpu, pl_log_dev);
+        if (!placebo_render[i][screen_top_bot]) {
+            err_log("placebo_render_init failed\n");
+            goto fail;
+        }
+
+        placebo_render_mode[i][screen_top_bot] = render_mode;
+        placebo_mode[i][screen_top_bot] = mode;
+    }
+
+fail:
+    return reset_mode;
+}
+
 void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width, int height, int screen_top_bot, int ctx_top_bot, int index, view_mode_t view_mode, int win_shared)
 {
     double ctx_left_f;
@@ -873,6 +939,9 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
     bool success = false;
 
     int upscaling_selected = ui_upscaling_selected;
+    struct pl_opengl_wrap_params tex_pars = {};
+    tex_pars.target = GL_TEXTURE_2D;
+    tex_pars.iformat = GL_INT_FORMAT;
 
     if (upscaled) {
         if (!data) {
@@ -954,6 +1023,10 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
         }
 
         ctx->tex_upscaled_prev[i] = tex;
+
+        tex_pars.texture = tex;
+        tex_pars.width = height * scale;
+        tex_pars.height = width * scale;
     }
 
     if (!upscaled) {
@@ -977,13 +1050,11 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
         tex = ctx->gl_tex_id[i];
 
         ctx->tex_upscaled_prev[i] = 0;
-    }
 
-    if (is_renderer_csc())
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_fbo_sc[i]);
-    else
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glViewport(0, 0, win_width_drawable, win_height_drawable);
+        tex_pars.texture = tex;
+        tex_pars.width = height;
+        tex_pars.height = width;
+    }
 
     nk_bool use_fsr = upscaling_fsr;
 #ifdef _WIN32
@@ -1034,6 +1105,12 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
             glBindTexture(GL_TEXTURE_2D, ctx->tex_fsr_prev[i]);
         }
 
+        if (is_renderer_csc())
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_fbo_sc[i]);
+        else
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glViewport(0, 0, win_width_drawable, win_height_drawable);
+
         glUseProgram(gl_program[i]);
 
         if (gl_use_vao) {
@@ -1062,6 +1139,41 @@ void ui_renderer_ogl_draw(struct rp_buffer_ctx_t *ctx, uint8_t *data, int width,
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
         }
     } else {
+        int reset_mode = placebo_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot);
+        if (placebo_render[i][screen_top_bot]) {
+            pl_tex in_tex = pl_opengl_wrap(pl_ogl_dev[i]->gpu, &tex_pars);
+            if (!in_tex) {
+                goto upscale_fail;
+            }
+            pl_tex out_tex = placebo_render_run(placebo_render[i][screen_top_bot], in_tex, ctx_height, ctx_width);
+            if (!out_tex) {
+                goto upscale_fail;
+            }
+            GLuint out_fbo;
+            GLint out_iformat;
+            GLuint out_target;
+            GLuint out_ogl_tex = pl_opengl_unwrap(pl_ogl_dev[i]->gpu, out_tex, &out_target, &out_iformat, &out_fbo);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(out_target, out_ogl_tex);
+            glDisable(GL_BLEND);
+            glDisable(GL_SCISSOR_TEST);
+        } else if (!reset_mode) {
+upscale_fail:
+            err_log("placebo render failed\n");
+            if (IS_UPSCALING_0(upscaling_selected)) {
+                ui_upscaling_selected = UPSCALING_DEFAULT_0_UI_INDEX(UPSCALING_DEFAULT_0_NONE);
+            } else if (IS_UPSCALING_1(upscaling_selected)) {
+                ui_upscaling_selected = UPSCALING_DEFAULT_1_UI_INDEX(UPSCALING_DEFAULT_1_REAL_CUGAN);
+            }
+        }
+
+        if (is_renderer_csc())
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_fbo_sc[i]);
+        else
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glViewport(0, 0, win_width_drawable, win_height_drawable);
+
         glUseProgram(gl_program[i]);
 
         if (gl_use_vao) {

@@ -1,0 +1,12 @@
+{
+    "modes": [
+        {
+            "name": "Real-CUGAN + CRT",
+            "effects": [
+                {
+                    "name": "Retro/crt-lottes"
+                }
+            ]
+        }
+    ]
+}

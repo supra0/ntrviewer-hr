@@ -775,7 +775,7 @@ static void d3d11_draw_screen(bool upscaled, int upscaling_selected, int ctx_top
 {
     int i = ctx_top_bot;
 
-    if (in_tex && magpie) {
+    if (in_tex) {
         int width = (screen_top_bot == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1);
         int height = SCREEN_WIDTH;
         int reset_mode = magpie_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot, height, width, ctx_height[screen_top_bot], ctx_width[screen_top_bot]);

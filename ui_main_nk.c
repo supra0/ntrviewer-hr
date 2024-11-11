@@ -25,13 +25,19 @@ static struct nk_style nk_style_current;
 
 void nk_font_stash_begin(struct nk_font_atlas **atlas) {
     if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
 #ifdef _WIN32
         nk_d3d11_font_stash_begin(atlas);
 #endif
+#endif
     } else if (is_renderer_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         nk_sdl_gl3_font_stash_begin(atlas);
+#endif
     } else if (is_renderer_gles()) {
+#ifndef USE_SDL_RENDERER_ONLY
         nk_sdl_gles2_font_stash_begin(atlas);
+#endif
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_begin(atlas);
     }
@@ -39,13 +45,19 @@ void nk_font_stash_begin(struct nk_font_atlas **atlas) {
 
 void nk_font_stash_end(void) {
     if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
 #ifdef _WIN32
         nk_d3d11_font_stash_end();
 #endif
+#endif
     } else if (is_renderer_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         nk_sdl_gl3_font_stash_end();
+#endif
     } else if (is_renderer_gles()) {
+#ifndef USE_SDL_RENDERER_ONLY
         nk_sdl_gles2_font_stash_end();
+#endif
     } else if (is_renderer_sdl_renderer()) {
         nk_sdl_renderer_font_stash_end();
     }

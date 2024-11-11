@@ -4,12 +4,9 @@
 *.dll
 *.zip
 include/ncnn
-include/*.h
 lib
 magpie-*
 placebo-*
 
 ntrviewer*
-_win32*
-_pkg*
-_test*
+_*

@@ -1,14 +1,16 @@
 #include "placebo.h"
 #include <string>
-#include <variant>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <memory>
 #include <fstream>
 #include <iostream>
-#include <rapidjson/document.h>
+#include <algorithm>
 
+#include <rapidjson/document.h>
 #define PLACEBO_LOG_DIR "placebo-logs"
+#define PLACEBO_SHADER_DIR "placebo-shaders"
 #include <filesystem>
 #include <cstdio>
 
@@ -32,9 +34,9 @@ void placebo_log_destroy(pl_log *log) {
 }
 
 struct placebo_param_value_t {
-    int i;
-    unsigned u;
-    float f;
+    std::optional<int> i;
+    std::optional<unsigned> u;
+    std::optional<float> f;
 };
 
 struct placebo_effect_t {
@@ -139,12 +141,18 @@ static std::vector<placebo_mode_t> parse_modes(const rapidjson::GenericObject<tr
     return modes;
 }
 
-struct placebo_t *placebo_load(const char *filename) {
+static std::string read_file(const char *filename) {
     std::ifstream infile{filename};
     if (!infile)
-        return 0;
+        return {};
     std::istreambuf_iterator<char> itfilebegin{infile}, itfileend;
-    std::string json{itfilebegin, itfileend};
+    return {itfilebegin, itfileend};
+}
+
+struct placebo_t *placebo_load(const char *filename) {
+    std::string json = read_file(filename);
+    if (!json.size())
+        return 0;
 
     rapidjson::Document doc;
     doc.ParseInsitu<rapidjson::kParseCommentsFlag | rapidjson::kParseTrailingCommasFlag>(json.data());
@@ -183,4 +191,149 @@ const char *placebo_mode_name(struct placebo_t *placebo, size_t index, const cha
     }
 
     return placebo->display_names[index].c_str();
+}
+
+extern "C" {
+
+#include <libplacebo/renderer.h>
+#include <libplacebo/utils/upload.h>
+
+}
+
+struct placebo_render_t {
+    pl_renderer render;
+    pl_render_params render_params;
+    std::vector<const pl_hook *> hooks;
+    pl_tex out_tex;
+    pl_gpu gpu; // non-owning
+};
+
+struct placebo_render_t *placebo_render_init(struct placebo_t *placebo, size_t index, pl_gpu gpu, pl_log log) {
+    if (index >= placebo_mode_count(placebo))
+        return 0;
+
+    auto render = std::make_unique<placebo_render_t>();
+
+    memcpy(&render->render_params, &pl_render_fast_params, sizeof(pl_render_params));
+    render->render_params.upscaler = &pl_filter_bilinear;
+    render->render_params.downscaler = &pl_filter_bilinear;
+
+    auto &mode = placebo->modes[index];
+
+    render->hooks.resize(mode.effects.size());
+    for (int i = 0; i < (int)render->hooks.size(); ++i) {
+        auto &hook = render->hooks[i];
+        auto &effect = mode.effects[i];
+
+        std::string shader = read_file((PLACEBO_SHADER_DIR "/" + effect.filename + ".glsl").c_str());
+        if (!shader.size())
+            goto fail;
+
+        hook = pl_mpv_user_shader_parse(gpu, shader.data(), shader.size());
+        if (!hook)
+            goto fail;
+
+        for (int j = 0; j < hook->num_parameters; ++j) {
+            const pl_hook_par &par = hook->parameters[j];
+            auto it = effect.params.find(par.name);
+            if (it != effect.params.end()) {
+                auto &val = it->second;
+
+                switch (par.type) {
+                    case PL_VAR_SINT:
+                        if (val.i)
+                            par.data->i = std::clamp(val.i.value(), par.minimum.i, par.maximum.i);
+                        break;
+
+                    case PL_VAR_UINT:
+                        if (val.u)
+                            par.data->u = std::clamp(val.u.value(), par.minimum.u, par.maximum.u);
+                        break;
+
+                    case PL_VAR_FLOAT:
+                        if (val.f)
+                            par.data->f = std::clamp(val.f.value(), par.minimum.f, par.maximum.f);
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    render->render_params.num_hooks = render->hooks.size();
+    render->render_params.hooks = render->hooks.data();
+
+    render->render = pl_renderer_create(log, gpu);
+    if (!render->render) {
+        goto fail;
+    }
+
+    render->gpu = gpu;
+
+    return render.release();
+
+fail:
+    placebo_render_close(render.release());
+    return 0;
+}
+
+void placebo_render_close(struct placebo_render_t *render) {
+    if (render) {
+        for (auto &hook : render->hooks) {
+            pl_mpv_user_shader_destroy(&hook);
+        }
+        pl_renderer_destroy(&render->render);
+        delete render;
+    }
+}
+
+pl_tex placebo_render_run(struct placebo_render_t *render, pl_tex in_tex, int out_width, int out_height) {
+    pl_fmt out_fmt = pl_find_fmt(render->gpu, PL_FMT_UNORM, 4, 0, 0, pl_fmt_caps(PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_RENDERABLE));
+    if (!out_fmt)
+        return 0;
+
+    pl_tex_params out_tex_pars = {
+        .w = out_width,
+        .h = out_height,
+        .d = 0,
+        .format = out_fmt,
+        .sampleable = 1,
+        .renderable = 1,
+    };
+
+    if (!pl_tex_recreate(render->gpu, &render->out_tex, &out_tex_pars))
+        return 0;
+
+    pl_frame image = {
+        .num_planes = 1,
+        .planes = {{
+            .texture = in_tex,
+            .components = 4,
+            .component_mapping = {0, 1, 2, 3},
+        }},
+        .repr = {
+            .sys = PL_COLOR_SYSTEM_RGB,
+            .levels = PL_COLOR_LEVELS_FULL,
+            .alpha = PL_ALPHA_NONE,
+            .bits = {
+                .sample_depth = 32,
+                .color_depth = 32,
+            },
+        },
+        .color = pl_color_space_srgb,
+    };
+
+    pl_frame target = image;
+    target.planes[0].texture = render->out_tex;
+
+    if (!pl_render_image(render->render, &image, &target, &render->render_params))
+        return 0;
+
+    pl_render_errors err = pl_renderer_get_errors(render->render);
+    if (err.errors != PL_RENDER_ERR_NONE)
+        return 0;
+
+    return render->out_tex;
 }

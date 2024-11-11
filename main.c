@@ -3,15 +3,17 @@
 
 #include "ui_common_sdl.h"
 #include "ui_renderer_sdl.h"
+#include "ntr_common.h"
+#ifndef USE_SDL_RENDERER_ONLY
 #include "ui_renderer_d3d11.h"
 #include "ui_renderer_ogl.h"
-#include "ntr_common.h"
 #ifdef _WIN32
 #include "nuklear_d3d11.h"
 #include "ui_compositor_csc.h"
 #endif
 #include "nuklear_sdl_gl3.h"
 #include "nuklear_sdl_gles2.h"
+#endif
 #include "nuklear_sdl_renderer.h"
 #include "ntr_hb.h"
 #include "ntr_rp.h"
@@ -118,9 +120,11 @@ static struct option long_options[] = {
     {opt_name_sdl_hw, no_argument, &opt_flag_sdl_hw, 1},
     {opt_name_sdl_sw, no_argument, &opt_flag_sdl_sw, 1},
     {opt_name_ogl_dbg, no_argument, &is_renderer_ogl_dbg, 1},
+#ifndef USE_SDL_RENDERER_ONLY
     {opt_name_testing_no_ext_mem, no_argument, &opt_testing_no_ext_mem, 1},
     {opt_name_testing_no_shared_sem, no_argument, &opt_testing_no_shared_sem, 1},
     {opt_name_testing_no_fp16, no_argument, &opt_testing_no_fp16, 1},
+#endif
     {0, 0, 0, 0}};
 
 static void add_arg(enum ui_renderer_t arg, const char *name) {
@@ -234,6 +238,7 @@ static void parse_args(int argc, char **argv)
         printf("using %s\n", opt_name_ogl_dbg);
     }
 
+#ifndef USE_SDL_RENDERER_ONLY
     if (opt_testing_no_ext_mem) {
         printf("using %s\n", opt_name_testing_no_ext_mem);
     }
@@ -245,6 +250,7 @@ static void parse_args(int argc, char **argv)
     if (opt_testing_no_fp16) {
         printf("using %s\n", opt_name_testing_no_fp16);
     }
+#endif
 
     if (renderer_count) {
         printf("using drivers:\n");
@@ -278,7 +284,7 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
     int i = GetWindowLongPtrA(hwnd, GWLP_USERDATA);
 
     bool need_handle_input = 0;
-    LPARAM handled_lparam = lparam;
+    UNUSED LPARAM handled_lparam = lparam;
     bool resize_top_and_ui = i == SCREEN_TOP;
 
     switch (msg) {
@@ -288,13 +294,16 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
         case WM_SIZE: {
             if (resize_top_and_ui) {
+#ifndef USE_SDL_RENDERER_ONLY
                 rp_lock_wait(comp_lock);
+#endif
             }
             ui_win_width_drawable[i] = NK_MAX(LOWORD(lparam), 1);
             ui_win_height_drawable[i] = NK_MAX(HIWORD(lparam), 1);
             ui_win_width[i] = roundf(ui_win_width_drawable[i] / ui_win_scale[i]);
             ui_win_height[i] = roundf(ui_win_height_drawable[i] / ui_win_scale[i]);
             if (resize_top_and_ui) {
+#ifndef USE_SDL_RENDERER_ONLY
                 if (is_renderer_d3d11()) {
                     d3d11_ui_close();
                     if (d3d11_ui_init()) {
@@ -302,11 +311,14 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                         ui_compositing = 0;
                     }
                 }
+#endif
                 ui_nk_width = ui_win_width[i];
                 ui_nk_height = ui_win_height[i];
             }
             if (resize_top_and_ui) {
+#ifndef USE_SDL_RENDERER_ONLY
                 rp_lock_rel(comp_lock);
+#endif
             }
             break;
         }
@@ -358,7 +370,9 @@ static LRESULT CALLBACK main_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 nk_input_current = 1;
             }
 
+#ifndef USE_SDL_RENDERER_ONLY
             nk_d3d11_handle_event(hwnd, msg, wparam, handled_lparam);
+#endif
 
             if (!renderer_single_thread)
                 rp_lock_rel(nk_input_lock);
@@ -442,9 +456,13 @@ static void thread_loop(int i) {
             return;
 
     if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_d3d11_main(screen_top_bot, ctx_top_bot, view_mode, win_shared, bg);
+#endif
     } else if (is_renderer_sdl_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_ogl_main(screen_top_bot, ctx_top_bot, view_mode, win_shared, bg);
+#endif
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_main(ctx_top_bot, view_mode, bg);
     }
@@ -492,9 +510,13 @@ static void thread_loop(int i) {
     }
 
     if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_d3d11_present(screen_top_bot, ctx_top_bot, win_shared);
+#endif
     } else if (is_renderer_sdl_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_ogl_present(screen_top_bot, ctx_top_bot, win_shared);
+#endif
     } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_present(ctx_top_bot);
     }
@@ -507,8 +529,10 @@ static thread_ret_t window_thread_func(void *arg) {
     RO_INIT();
 
     int i = (int)(uintptr_t)arg;
+#ifndef USE_SDL_RENDERER_ONLY
     if (is_renderer_sdl_ogl())
         SDL_GL_MakeCurrent(ogl_win[i], gl_context[i]);
+#endif
     while (program_running)
         thread_loop(i);
     // TODO csc
@@ -599,9 +623,13 @@ static void main_loop(void) {
                 }
 
                 if (is_renderer_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
                     nk_sdl_gl3_handle_event(&evt);
+#endif
                 } else if (is_renderer_gles()) {
+#ifndef USE_SDL_RENDERER_ONLY
                     nk_sdl_gles2_handle_event(&evt);
+#endif
                 } else if (is_renderer_sdl_renderer()) {
                     nk_sdl_renderer_handle_event(&evt);
                 }
@@ -763,7 +791,9 @@ static void main_windows(void) {
         SetClassLongPtr(ui_hwnd[i], GCLP_HBRBACKGROUND, (LONG_PTR)bg_brush);
     }
 
+#ifndef USE_SDL_RENDERER_ONLY
     rp_lock_init(comp_lock);
+#endif
 #else
     // TODO
     SDL_AddEventWatch(sdl_win_resize_evt_watcher, NULL);
@@ -788,7 +818,9 @@ static void main_windows(void) {
     event_close(&update_bottom_screen_evt);
 
 #ifdef _WIN32
+#ifndef USE_SDL_RENDERER_ONLY
     rp_lock_close(comp_lock);
+#endif
 
     DeleteObject(bg_brush);
 #endif
@@ -810,15 +842,19 @@ int main(int argc, char **argv) {
     for (int i = 0; i < renderer_count; ++i) {
         ui_renderer = renderer_list[i];
         if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
             if (ui_renderer_d3d11_init())
                 ui_renderer_d3d11_destroy();
             else
                 renderer_inited = 1;
+#endif
         } else if (is_renderer_sdl_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
             if (ui_renderer_ogl_init())
                 ui_renderer_ogl_destroy();
             else
                 renderer_inited = 1;
+#endif
         } else if (is_renderer_sdl_renderer()) {
             if (ui_renderer_sdl_init())
                 ui_renderer_sdl_destroy();
@@ -835,12 +871,17 @@ int main(int argc, char **argv) {
 
     main_windows();
 
-    if (is_renderer_d3d11())
+    if (is_renderer_d3d11()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_d3d11_destroy();
-    else if (is_renderer_sdl_ogl())
+#endif
+    } else if (is_renderer_sdl_ogl()) {
+#ifndef USE_SDL_RENDERER_ONLY
         ui_renderer_ogl_destroy();
-    else if (is_renderer_sdl_renderer())
+#endif
+    } else if (is_renderer_sdl_renderer()) {
         ui_renderer_sdl_destroy();
+    }
 
     ui_common_sdl_destroy();
 

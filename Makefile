@@ -11,7 +11,10 @@ CFLAGS += -Wall -Wextra -flarge-source-files -MMD
 EMBED_JPEG_TURBO := 1
 
 ifeq ($(OS),Windows_NT)
-LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi -ld3dcompiler -ld3d11 -ldxgi -ldwmapi -lpathcch
+LDLIBS := -Llib -static -lmingw32 -lSDL2main -lSDL2 -lm -lkernel32 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -luuid -ladvapi32 -lsetupapi -lshell32 -ldinput8 -lws2_32 -liphlpapi
+ifneq ($(LITE),1)
+LDLIBS += -ld3dcompiler -ld3d11 -ldxgi -ldwmapi -lpathcch
+endif
 TARGET := ntrviewer.exe
 NASM := -DWIN64 -fwin64
 else
@@ -19,16 +22,28 @@ LDLIBS := -static-libgcc -static-libstdc++ -Llib -Wl,-Bstatic -lSDL2
 TARGET := ntrviewer
 NASM := -DELF -felf64
 endif
-LDLIBS += -lplacebo -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools
 
-GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_renderer_ogl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o placebo.o
+ifneq ($(LITE),1)
+LDLIBS += -lplacebo -lncnn -fopenmp -lglslang -lMachineIndependent -lOSDependent -lGenericCodeGen -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -llcms2
+else
+CPPFLAGS += -DUSE_SDL_RENDERER_ONLY
+endif
+
+ifneq ($(LITE),1)
+GL_OBJ := libGLAD.o libNK_SDL_GL3.o libNK_SDL_GLES2.o ui_renderer_ogl.o fsr/fsr_main.o fsr/image_utils.o realcugan_lib.o realcugan.o placebo.o
 ifeq ($(OS),Windows_NT)
 MAGP_SRC := $(wildcard magpie/*.cpp)
 MAGP_OBJ := $(MAGP_SRC:.cpp=.o)
 MUPR_SRC := $(wildcard muparser/*.cpp)
 MUPR_OBJ := $(MUPR_SRC:.cpp=.o)
-GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o ntrviewer.res.o $(MAGP_OBJ) $(MUPR_OBJ)
+GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o $(MAGP_OBJ) $(MUPR_OBJ)
 LDLIBS += -lshlwapi
+endif
+endif
+
+GL_OBJ += libNK_SDL_renderer.o ui_common_sdl.o ui_renderer_sdl.o ui_main_nk.o ntr_common.o ntr_hb.o ntr_rp.o
+ifeq ($(OS),Windows_NT)
+GL_OBJ += ntrviewer.res.o
 endif
 
 # LDFLAGS := -s
@@ -101,7 +116,7 @@ fsr/%.o: fsr/%.cpp
 	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Wno-unused-parameter -Wno-unused-function -Wno-ignored-qualifiers
 
 placebo.o: placebo.cpp
-	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Imagpie
+	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -Imagpie -Wno-missing-field-initializers
 
 muparser/%.o: muparser/%.cpp
 	$(CXX) $< -o $@ -c $(CFLAGS) $(CPPFLAGS) -DMUPARSER_STATIC -Wno-unused-parameter
