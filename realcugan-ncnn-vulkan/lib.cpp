@@ -532,7 +532,7 @@ int realcugan_run(int ctx_top_bot, int locks_index, int w, int h, int c, const u
     ncnn::Mat inimage = ncnn::Mat(w, h, (void*)indata, (size_t)c, c);
     ncnn::Mat outimage = ncnn::Mat(w * REALCUGAN_SCALE, h * REALCUGAN_SCALE, (void*)outdata, (size_t)c, c);
 
-    if (locks_index >= (int)realcugan_locks.size()) {
+    if (locks_index >= (int)realcugan_locks.size() || ctx_top_bot >= (int)realcugan[locks_index]->out_gpu_tex.size()) {
         return -2;
     }
 

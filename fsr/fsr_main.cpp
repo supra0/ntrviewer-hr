@@ -137,7 +137,7 @@ extern "C" GLuint fsr_main(int ctx_top_bot, int screen_top_bot, GLuint inputText
     // uint32_t bilinearProgram = createBilinearComputeProgram(baseDir);
 
     int index = (i * SCREEN_COUNT) + screen_top_bot;
-    if (index + 1 > (int)fsr_last.size()) {
+    if (index >= (int)fsr_last.size()) {
         return 0;
     }
 

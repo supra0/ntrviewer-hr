@@ -776,9 +776,9 @@ static void d3d11_draw_screen(bool upscaled, int upscaling_selected, int ctx_top
     int i = ctx_top_bot;
 
     if (in_tex && magpie) {
-        int width = SCREEN_WIDTH;
-        int height = (screen_top_bot == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1);
-        int reset_mode = magpie_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot, width, height, ctx_width[screen_top_bot], ctx_height[screen_top_bot]);
+        int width = (screen_top_bot == SCREEN_TOP ? SCREEN_HEIGHT0 : SCREEN_HEIGHT1);
+        int height = SCREEN_WIDTH;
+        int reset_mode = magpie_upscaling_update(upscaled, upscaling_selected, i, screen_top_bot, height, width, ctx_height[screen_top_bot], ctx_width[screen_top_bot]);
 
         if (magpie_render[i][screen_top_bot]) {
             ID3D11DeviceContext_CopyResource(d3d11device_context[i], (ID3D11Resource *)magpie_in_tex[i][screen_top_bot], in_tex);

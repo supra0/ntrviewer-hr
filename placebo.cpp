@@ -9,17 +9,11 @@
 #include <rapidjson/document.h>
 
 #define PLACEBO_LOG_DIR "placebo-logs"
-#ifdef _WIN32
-#include <fileapi.h>
-#define create_directory(name) CreateDirectoryA(name, NULL)
-#else
-#error TODO
-#endif
-
+#include <filesystem>
 #include <cstdio>
 
 pl_log placebo_log_create(void) {
-    create_directory(PLACEBO_LOG_DIR);
+    std::filesystem::create_directory(PLACEBO_LOG_DIR);
     pl_log_params params = {
         .log_cb = pl_log_simple,
         .log_priv = fopen(PLACEBO_LOG_DIR "/placebo.log", "w"),
