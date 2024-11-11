@@ -127,7 +127,7 @@ std::array<struct fsr_last_t, SCREEN_COUNT * SCREEN_COUNT> fsr_last;
 uint32_t fsrProgramEASU[SCREEN_COUNT], fsrProgramRCAS[SCREEN_COUNT];
 
 extern "C" GLuint fsr_main(int ctx_top_bot, int screen_top_bot, GLuint inputTexture, uint32_t in_w, uint32_t in_h, uint32_t out_w, uint32_t out_h, float rcasAtt) {
-    const std::string baseDir = "fsr/";
+    const std::string baseDir = "real-cugan-fsr/";
     int i = ctx_top_bot;
 
     if (!fsrProgramEASU[i])

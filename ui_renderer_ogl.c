@@ -774,8 +774,10 @@ void ui_renderer_ogl_destroy(void) {
     sdl_win_destroy(ogl_win);
 }
 
+#ifdef _WIN32
 static GLuint tex_sc[SCREEN_COUNT];
 static HANDLE handle_sc[SCREEN_COUNT];
+#endif
 
 void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_mode, bool win_shared, float bg[4]) {
     int i = ctx_top_bot;
@@ -796,6 +798,7 @@ void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_
 
     ogl_upscaling_update(i);
 
+#ifdef _WIN32
     if (is_renderer_csc()) {
         sc_fail[p] = 0;
         ui_compositor_csc_main(screen_top_bot, i, win_shared);
@@ -818,6 +821,7 @@ void ui_renderer_ogl_main(int screen_top_bot, int ctx_top_bot, view_mode_t view_
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_fbo_sc[screen_top_bot]);
         glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, tex_sc[p]);
     }
+#endif
 
     glViewport(0, 0, ui_ctx_width[p], ui_ctx_height[p]);
     if (!win_shared) {
@@ -1228,6 +1232,7 @@ void ui_renderer_ogl_present(int screen_top_bot, int ctx_top_bot, bool win_share
     int p = win_shared ? screen_top_bot : i;
 
     if (is_renderer_csc()) {
+#ifdef _WIN32
         if (!sc_fail[p]) {
             if (p == SCREEN_TOP) {
                 GLuint ui_tex;
@@ -1306,8 +1311,11 @@ void ui_renderer_ogl_present(int screen_top_bot, int ctx_top_bot, bool win_share
         }
 fail:
         ui_compositor_csc_present(i);
+#endif
     } else {
+#ifdef _WIN32
         if (!sc_fail[p]) {
+#endif
             if (p == SCREEN_TOP) {
                 if (is_renderer_gles()) {
                     nk_sdl_gles2_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_MEMORY, MAX_ELEMENT_MEMORY, 0);
@@ -1317,11 +1325,15 @@ fail:
                 nk_gui_next = 0;
             }
             SDL_GL_SwapWindow(ogl_win[i]);
+#ifdef _WIN32
         }
+#endif
     }
 
+#ifdef _WIN32
     if (sc_fail[p]) {
         Sleep(REST_EVERY_MS);
         sc_fail[p] = 0;
     }
+#endif
 }

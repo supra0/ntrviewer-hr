@@ -38,6 +38,8 @@ MUPR_SRC := $(wildcard muparser/*.cpp)
 MUPR_OBJ := $(MUPR_SRC:.cpp=.o)
 GL_OBJ += libGLAD_WGL.o libNK_D3D11.o ui_renderer_d3d11.o ui_compositor_csc.o $(MAGP_OBJ) $(MUPR_OBJ)
 LDLIBS += -lshlwapi
+else
+LDLIBS += -lunwind -llzma
 endif
 endif
 

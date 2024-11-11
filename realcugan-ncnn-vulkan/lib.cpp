@@ -85,7 +85,7 @@ static void realcugan_close() {
 
 static int noise = -1;
 static std::vector<int> tilesize;
-static path_t model = PATHSTR("models-se");
+static path_t model = PATHSTR("real-cugan-models-se");
 static int syncgap = 0;
 static int tta_mode = 0;
 static int scale = REALCUGAN_SCALE;

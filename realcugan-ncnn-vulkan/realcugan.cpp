@@ -824,11 +824,11 @@ int RealCUGAN::process(int index, const ncnn::Mat& inimage, ncnn::Mat& outimage)
 
 using namespace ncnn;
 
+#ifdef _WIN32
 typedef VkResult (VKAPI_PTR *PFN_vkGetPhysicalDeviceImageFormatProperties2)(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2 *pImageFormatInfo, VkImageFormatProperties2 *pImageFormatProperties);
 
 static PFN_vkGetPhysicalDeviceImageFormatProperties2 vkGetPhysicalDeviceImageFormatProperties2;
 
-#ifdef _WIN32
 typedef struct VkImportMemoryWin32HandleInfoKHR {
     VkStructureType sType;
     const void *pNext;
